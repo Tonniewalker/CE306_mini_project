@@ -13,7 +13,6 @@ const STORE_EMAIL = 'store@prefood.dpu.ac.th';
 const STORE_PASSWORD = 'store1234';
 const STORE_NAME = 'PRE-FOOD Kitchen';
 const STORE_DESCRIPTION = 'อาหารตามสั่ง · ก๋วยเตี๋ยว · เครื่องดื่ม';
-const STORE_LOCATION = 'โรงอาหารกลาง DPU';
 
 // บัญชีผู้ดูแลระบบ
 const ADMIN_EMAIL = 'admin@prefood.dpu.ac.th';
@@ -132,6 +131,13 @@ function migrate(db) {
     console.log(`Migrated: status logs for ${noLog.length} orders`);
   }
 
+  // เลิกใช้คอลัมน์จุดรับอาหารของร้าน
+  const storeCols = db.prepare('PRAGMA table_info(stores)').all().map((c) => c.name);
+  if (storeCols.includes('location')) {
+    db.exec('ALTER TABLE stores DROP COLUMN location');
+    console.log('Migrated: removed stores.location');
+  }
+
   // เลิกใช้รูปจากลิงก์เว็บอื่น
   const external = db
     .prepare("UPDATE menu_items SET image_url = NULL WHERE image_url IS NOT NULL AND image_url NOT LIKE '/uploads/%'")
@@ -162,10 +168,10 @@ function seed(db) {
   if (storeUser && !store) {
     const result = db
       .prepare(
-        `INSERT INTO stores (owner_id, name, description, location, open_time, close_time, status)
-         VALUES (?, ?, ?, ?, '09:00', '19:00', 'approved')`
+        `INSERT INTO stores (owner_id, name, description, open_time, close_time, status)
+         VALUES (?, ?, ?, '09:00', '19:00', 'approved')`
       )
-      .run(storeUser.id, STORE_NAME, STORE_DESCRIPTION, STORE_LOCATION);
+      .run(storeUser.id, STORE_NAME, STORE_DESCRIPTION);
     store = { id: result.lastInsertRowid };
     console.log(`Seeded store: ${STORE_NAME}`);
   }

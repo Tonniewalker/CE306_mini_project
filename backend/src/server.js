@@ -9,6 +9,10 @@ if (!process.env.JWT_SECRET) {
 
 require('./db/init').initDb(); // เตรียมฐานข้อมูล
 
+if (require('./config').ALWAYS_OPEN) {
+  console.log('[PRE-FOOD] โหมดทดสอบ: ทุกร้านเปิด 24 ชั่วโมง (ปิดได้ที่ DEV_ALWAYS_OPEN ใน .env)');
+}
+
 const path = require('path');
 const express = require('express');
 const cors = require('cors');

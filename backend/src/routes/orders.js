@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { requireStore } = require('../middleware/store');
+const { storeHours } = require('../config');
 
 const router = express.Router();
 
@@ -57,7 +58,7 @@ function attachItems(order) {
 function findOrder(id) {
   return db
     .prepare(
-      `SELECT o.*, u.name AS customer_name, s.name AS store_name, s.location AS store_location
+      `SELECT o.*, u.name AS customer_name, s.name AS store_name
        FROM orders o
        JOIN users u ON u.id = o.user_id
        LEFT JOIN stores s ON s.id = o.store_id
@@ -127,9 +128,13 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
   if (!store.is_accepting) {
     return res.status(400).json({ error: 'ร้านนี้ปิดรับออเดอร์ชั่วคราว' });
   }
+  const hours = storeHours(store);
+  if (now.getHours() * 60 + now.getMinutes() < toMinutes(hours.open)) {
+    return res.status(400).json({ error: 'ร้านยังไม่เปิด' });
+  }
   const pickupMinutes = pickupDate.getHours() * 60 + pickupDate.getMinutes();
-  if (pickupMinutes < toMinutes(store.open_time) || pickupMinutes > toMinutes(store.close_time)) {
-    return res.status(400).json({ error: `เวลารับอาหารต้องอยู่ระหว่าง ${store.open_time} – ${store.close_time} น.` });
+  if (pickupMinutes < toMinutes(hours.open) || pickupMinutes > toMinutes(hours.close)) {
+    return res.status(400).json({ error: `เวลารับอาหารต้องอยู่ระหว่าง ${hours.open} – ${hours.close} น.` });
   }
 
   const insertOrder = db.transaction(() => {
@@ -166,7 +171,7 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
 router.get('/my', authenticate, requireRole('customer'), (req, res) => {
   const orders = db
     .prepare(
-      `SELECT o.*, s.name AS store_name, s.location AS store_location
+      `SELECT o.*, s.name AS store_name
        FROM orders o LEFT JOIN stores s ON s.id = o.store_id
        WHERE o.user_id = ? ORDER BY o.created_at DESC, o.id DESC`
     )

@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS stores (
     owner_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
     name TEXT NOT NULL,
     description TEXT,
-    location TEXT,
     image_url TEXT,
     open_time TEXT NOT NULL DEFAULT '09:00',   -- HH:MM
     close_time TEXT NOT NULL DEFAULT '19:00',  -- HH:MM

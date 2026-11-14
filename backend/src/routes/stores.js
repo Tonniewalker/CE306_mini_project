@@ -1,6 +1,7 @@
 // API ข้อมูลร้านค้า (public)
 const express = require('express');
 const db = require('../db/connection');
+const { storeHours } = require('../config');
 
 const router = express.Router();
 
@@ -24,10 +25,9 @@ function publicStore(s) {
     id: s.id,
     name: s.name,
     description: s.description,
-    location: s.location,
     image_url: s.image_url,
-    open_time: s.open_time,
-    close_time: s.close_time,
+    open_time: storeHours(s).open,
+    close_time: storeHours(s).close,
     is_accepting: !!s.is_accepting,
     queue: queueOf(s.id),
   };
