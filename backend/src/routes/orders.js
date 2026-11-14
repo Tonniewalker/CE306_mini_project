@@ -20,7 +20,7 @@ const STATUS_LABELS = {
   preparing: 'กำลังเตรียมอาหาร',
   ready: 'พร้อมรับอาหาร',
   completed: 'รับอาหารแล้ว',
-  cancelled: 'ยกเลิกแล้ว',
+  cancelled: 'ลูกค้ายกเลิก',
   rejected: 'ร้านปฏิเสธ',
   no_show: 'ไม่มารับ',
 };
@@ -70,9 +70,13 @@ function findOrder(id) {
 // POST /api/orders - สั่งอาหาร (ผู้ใช้)
 router.post('/', authenticate, requireRole('customer'), (req, res) => {
   const { items, pickup_time } = req.body;
+  const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'ตะกร้าว่างเปล่า กรุณาเลือกเมนูอย่างน้อย 1 รายการ' });
+  }
+  if (note.length > 200) {
+    return res.status(400).json({ error: 'หมายเหตุยาวเกิน 200 ตัวอักษร' });
   }
   if (!pickup_time) {
     return res.status(400).json({ error: 'กรุณาเลือกเวลารับอาหาร' });
@@ -146,10 +150,10 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
     // บันทึกออเดอร์ (ชำระแบบจำลอง สถานะเป็น paid ทันที)
     const orderResult = db
       .prepare(
-        `INSERT INTO orders (user_id, store_id, status, pickup_time, total_amount, payment_method, payment_status, queue_number)
-         VALUES (?, ?, 'paid', ?, ?, ?, 'paid', ?)`
+        `INSERT INTO orders (user_id, store_id, status, pickup_time, total_amount, payment_method, payment_status, queue_number, note)
+         VALUES (?, ?, 'paid', ?, ?, ?, 'paid', ?, ?)`
       )
-      .run(req.user.id, store.id, pickupDate.toISOString(), totalAmount, PAYMENT_METHOD, lastQueue + 1);
+      .run(req.user.id, store.id, pickupDate.toISOString(), totalAmount, PAYMENT_METHOD, lastQueue + 1, note || null);
 
     const orderId = orderResult.lastInsertRowid;
     logStatus(orderId, 'paid', req.user.id);
@@ -179,6 +183,66 @@ router.get('/my', authenticate, requireRole('customer'), (req, res) => {
   res.json(orders.map(attachItems));
 });
 
+// POST /api/orders/:id/cancel - ยกเลิกออเดอร์ (ผู้ใช้ ได้เฉพาะก่อนร้านรับ)
+router.post('/:id/cancel', authenticate, requireRole('customer'), (req, res) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!order) return res.status(404).json({ error: 'ไม่พบออเดอร์นี้' });
+  if (order.status === 'cancelled') {
+    return res.status(409).json({ error: 'ออเดอร์นี้ยกเลิกไปแล้ว' });
+  }
+  if (order.status !== 'paid') {
+    return res.status(409).json({ error: 'ร้านรับออเดอร์แล้ว ยกเลิกไม่ได้' });
+  }
+
+  const changed = db.transaction(() => {
+    // กันร้านรับออเดอร์พร้อมกัน
+    const result = db
+      .prepare(
+        `UPDATE orders SET status = 'cancelled', payment_status = 'refunded', updated_at = datetime('now')
+         WHERE id = ? AND status = 'paid'`
+      )
+      .run(order.id);
+    if (!result.changes) return false;
+    logStatus(order.id, 'cancelled', req.user.id);
+    return true;
+  })();
+  if (!changed) {
+    return res.status(409).json({ error: 'ร้านรับออเดอร์แล้ว ยกเลิกไม่ได้' });
+  }
+  res.json(attachItems(findOrder(order.id)));
+});
+
+// POST /api/orders/:id/pickup - ยืนยันรับอาหาร (ผู้ใช้ ได้เฉพาะตอนอาหารพร้อมรับ)
+router.post('/:id/pickup', authenticate, requireRole('customer'), (req, res) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!order) return res.status(404).json({ error: 'ไม่พบออเดอร์นี้' });
+  if (order.status === 'completed') {
+    return res.status(409).json({ error: 'ออเดอร์นี้รับอาหารไปแล้ว' });
+  }
+  if (order.status !== 'ready') {
+    return res.status(409).json({
+      error: ['paid', 'preparing'].includes(order.status) ? 'อาหารยังไม่พร้อมรับ' : 'ออเดอร์นี้ปิดไปแล้ว',
+    });
+  }
+
+  const changed = db.transaction(() => {
+    // กันร้านกดยืนยันพร้อมกัน
+    const result = db
+      .prepare(
+        `UPDATE orders SET status = 'completed', picked_up_at = datetime('now'), updated_at = datetime('now')
+         WHERE id = ? AND status = 'ready'`
+      )
+      .run(order.id);
+    if (!result.changes) return false;
+    logStatus(order.id, 'completed', req.user.id);
+    return true;
+  })();
+  if (!changed) {
+    return res.status(409).json({ error: 'ออเดอร์นี้รับอาหารไปแล้ว' });
+  }
+  res.json(attachItems(findOrder(order.id)));
+});
+
 // GET /api/orders/:id - รายละเอียดออเดอร์ + จำนวนคิวก่อนหน้า
 router.get('/:id', authenticate, (req, res) => {
   const order = findOrder(req.params.id);
@@ -201,7 +265,11 @@ router.get('/:id', authenticate, (req, res) => {
       .get(order.id, order.store_id, order.created_at).c;
   }
   const logs = db
-    .prepare('SELECT status, note, created_at FROM order_status_logs WHERE order_id = ? ORDER BY id')
+    .prepare(
+      `SELECT l.status, l.note, l.created_at, u.role AS changed_by_role
+       FROM order_status_logs l LEFT JOIN users u ON u.id = l.changed_by
+       WHERE l.order_id = ? ORDER BY l.id`
+    )
     .all(order.id);
   res.json({ ...attachItems(order), queue_ahead: queueAhead, logs });
 });
@@ -238,6 +306,12 @@ router.patch('/:id/status', authenticate, requireRole('store'), requireStore, (r
   const existing = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.id, req.store.id);
   if (!existing) return res.status(404).json({ error: 'ไม่พบออเดอร์นี้' });
 
+  if (existing.status === 'completed') {
+    return res.status(409).json({ error: 'ออเดอร์นี้รับอาหารไปแล้ว' });
+  }
+  if (existing.status === 'cancelled') {
+    return res.status(409).json({ error: 'ไม่สามารถรับออเดอร์ได้ เนื่องจากลูกค้ายกเลิกออเดอร์นี้แล้ว' });
+  }
   if (status === existing.status) {
     return res.status(409).json({ error: 'ออเดอร์นี้อยู่ในสถานะนี้แล้ว' });
   }

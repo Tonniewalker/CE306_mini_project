@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS orders (
         payment_status IN ('unpaid', 'paid', 'refunded')
     ),
     queue_number INTEGER,                -- เลขคิวของวัน
+    note TEXT,                           -- หมายเหตุถึงร้าน
     cancel_reason TEXT,                  -- เหตุผลที่ยกเลิก/ปฏิเสธ
     picked_up_at TEXT,                   -- เวลาที่ลูกค้ารับอาหาร
     created_at TEXT NOT NULL DEFAULT (datetime('now')),

@@ -116,6 +116,13 @@ function migrate(db) {
     console.log('Migrated: orders table (new statuses, payment_status, cancel_reason, picked_up_at)');
   }
 
+  // หมายเหตุถึงร้าน
+  const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+  if (!orderCols.includes('note')) {
+    db.exec('ALTER TABLE orders ADD COLUMN note TEXT');
+    console.log('Migrated: added orders.note');
+  }
+
   // ประวัติสถานะของออเดอร์ที่ยังไม่มีประวัติ
   const noLog = db
     .prepare('SELECT * FROM orders o WHERE NOT EXISTS (SELECT 1 FROM order_status_logs l WHERE l.order_id = o.id)')

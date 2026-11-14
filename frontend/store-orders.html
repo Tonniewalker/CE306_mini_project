@@ -57,7 +57,14 @@
       { status: 'preparing', title: 'กำลังทำ', color: 'var(--amber)', next: 'ready', action: 'อาหารพร้อมแล้ว', btn: 'btn--green' },
       { status: 'ready', title: 'พร้อมรับ', color: 'var(--green)', next: 'completed', action: 'ลูกค้ารับแล้ว', btn: 'btn--white' },
     ];
+    // ข้อความหน้าต่างยืนยันของแต่ละปุ่ม
+    const CONFIRMS = {
+      preparing: { title: 'รับออเดอร์ใช่ไหม?', message: 'รับออเดอร์คิว {q} และเริ่มทำอาหารเลย', confirmText: 'รับออเดอร์', cancelText: 'ยังไม่รับ' },
+      ready: { title: 'ทำอาหารเสร็จแล้วใช่ไหม?', message: 'แจ้งลูกค้าคิว {q} ว่าอาหารพร้อมรับแล้ว', confirmText: 'เสร็จแล้ว', cancelText: 'ยังไม่เสร็จ' },
+      completed: { title: 'ลูกค้ารับอาหารแล้วใช่ไหม?', message: 'ยืนยันว่าส่งอาหารคิว {q} ให้ลูกค้าแล้ว ยืนยันแล้วย้อนกลับไม่ได้', confirmText: 'รับแล้ว', cancelText: 'ยังไม่ได้รับ' },
+    };
     let knownIds = null; // id ออเดอร์ที่เคยเห็น
+    let lastStatuses = new Map(); // สถานะล่าสุดของแต่ละออเดอร์
     let busy = false;
 
     // ป้ายเวลารับ
@@ -82,6 +89,7 @@
             ${timeChip(o)}
           </div>
           <div class="ticket__items">${items}</div>
+          ${o.note ? `<div class="ticket__note">📝 ${escapeHtml(o.note)}</div>` : ''}
           <div class="ticket__bottom">
             <span class="muted">รับ ${escapeHtml(formatTime(o.pickup_time))} · สั่ง ${escapeHtml(formatTime(o.created_at))}</span>
             <span class="bold">${formatCurrency(o.total_amount)}</span>
@@ -121,6 +129,18 @@
         }
       }
       knownIds = new Set(orders.map((o) => o.id));
+
+      // แจ้งเมื่อลูกค้ายกเลิกออเดอร์ หรือยืนยันรับอาหารเอง
+      for (const o of orders) {
+        const before = lastStatuses.get(o.id);
+        if (before && before !== 'cancelled' && o.status === 'cancelled') {
+          toast(`ลูกค้ายกเลิกออเดอร์คิว ${queueLabel(o.queue_number)}`, 'error', 4000);
+        }
+        if (before === 'ready' && o.status === 'completed') {
+          toast(`ลูกค้าคิว ${queueLabel(o.queue_number)} ยืนยันรับอาหารแล้ว`);
+        }
+      }
+      lastStatuses = new Map(orders.map((o) => [o.id, o.status]));
 
       document.getElementById('kanban').innerHTML = COLUMNS.map((col) => {
         const list = orders
@@ -172,9 +192,12 @@
       busy = true;
       try {
         await apiRequest(`/orders/${id}/status`, { method: 'PATCH', auth: true, body: { status, reason } });
+        lastStatuses.set(id, status);
         toast(`อัปเดตออเดอร์ #${id}: ${STATUS[status].label}`);
       } catch (err) {
         toast(err.message, 'error');
+        if (err.message.includes('ลูกค้ายกเลิก')) lastStatuses.set(id, 'cancelled'); // ไม่ต้องแจ้งซ้ำ
+        if (err.message.includes('รับอาหารไปแล้ว')) lastStatuses.set(id, 'completed');
       } finally {
         busy = false;
         load();
@@ -215,6 +238,13 @@
       if (!btn) return;
       const id = Number(btn.dataset.id);
       if (btn.dataset.reject) return openReject(id);
+      // ยืนยันก่อนเปลี่ยนสถานะ
+      const q = btn.closest('.ticket').querySelector('.ticket__q').textContent;
+      const ask = CONFIRMS[btn.dataset.next];
+      if (ask) {
+        const ok = await confirmDialog({ ...ask, message: ask.message.replace('{q}', q) });
+        if (!ok) return;
+      }
       btn.disabled = true;
       updateStatus(id, btn.dataset.next);
     });

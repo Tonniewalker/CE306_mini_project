@@ -48,6 +48,7 @@
     let CLOSE = 0;
     const LEAD = ORDER_RULES.minLeadMinutes;
 
+    const NOTE_KEY = 'prefood_note';
     let pickupMin = null; // เวลารับที่เลือก (นาที), null = ปิดรับออเดอร์
 
     // เวลาปัจจุบัน (นาที)
@@ -212,6 +213,11 @@
                   </div>`).join('')}
               </div>
             </section>
+
+            <section class="card">
+              <div class="card__title">${icon('edit')}หมายเหตุถึงร้าน</div>
+              <textarea class="input" id="orderNote" rows="2" maxlength="200" placeholder="เช่น ไม่เผ็ด, ไม่ใส่ผัก (ไม่บังคับ)">${escapeHtml(sessionStorage.getItem(NOTE_KEY) || '')}</textarea>
+            </section>
           </div>
 
           <aside class="checkout-side">
@@ -260,6 +266,11 @@
     });
     document.getElementById('content').addEventListener('input', (e) => {
       if (e.target.id === 'pkRange') setPickup(Number(e.target.value));
+    });
+
+    // จำหมายเหตุไว้ระหว่างแก้ตะกร้า
+    document.getElementById('content').addEventListener('input', (e) => {
+      if (e.target.id === 'orderNote') sessionStorage.setItem(NOTE_KEY, e.target.value);
     });
 
     /* ---------- ชำระเงิน (จำลอง) ---------- */
@@ -330,10 +341,11 @@
         try {
           const items = Object.values(getCart()).map((i) => ({ menu_item_id: i.menu_item_id, quantity: i.quantity }));
           const [order] = await Promise.all([
-            apiRequest('/orders', { method: 'POST', auth: true, body: { items, pickup_time: pickupIso } }),
+            apiRequest('/orders', { method: 'POST', auth: true, body: { items, pickup_time: pickupIso, note: sessionStorage.getItem(NOTE_KEY) || '' } }),
             new Promise((r) => setTimeout(r, 1200)), // จำลองเวลาตรวจสอบ
           ]);
           clearCart();
+          sessionStorage.removeItem(NOTE_KEY);
           modal.setTitle('');
           modal.setBody(`
             <div style="text-align:center;padding:8px 0 4px">

@@ -47,6 +47,16 @@
     document.getElementById('refreshBtn').innerHTML = icon('refresh');
 
     const orderId = new URLSearchParams(location.search).get('id');
+    // ข้อความในไทม์ไลน์
+    const TIMELINE_LABELS = {
+      paid: 'สั่งและชำระเงินแล้ว',
+      preparing: 'ร้านรับออเดอร์ กำลังทำอาหาร',
+      ready: 'อาหารพร้อมรับ',
+      completed: 'รับอาหารแล้ว',
+      cancelled: 'ยกเลิกออเดอร์',
+      rejected: 'ร้านปฏิเสธออเดอร์',
+      no_show: 'ไม่ได้มารับอาหาร',
+    };
     const STEPS = [
       { key: 'paid', label: 'ชำระเงินแล้ว', emoji: '🧾' },
       { key: 'preparing', label: 'กำลังทำ', emoji: '👨‍🍳' },
@@ -67,6 +77,29 @@
           <div class="progress__label">${s.label}</div>
         </div>`;
       }).join('')}</div>`;
+    }
+
+    // ไทม์ไลน์สถานะ
+    function timelineHtml(order) {
+      if (!order.logs || !order.logs.length) return '';
+      const last = order.logs.length - 1;
+      return `
+        <section class="card mt-12">
+          <div class="card__title">${icon('clock')}ไทม์ไลน์</div>
+          <ol class="timeline">
+            ${order.logs.map((l, i) => `
+              <li class="${i === last ? 'current' : ''}">
+                <span class="timeline__dot"></span>
+                <div class="grow">
+                  <div class="bold">${escapeHtml(l.status === 'completed'
+                    ? (l.changed_by_role === 'customer' ? 'คุณยืนยันรับอาหารแล้ว' : 'ร้านยืนยันว่ารับอาหารแล้ว')
+                    : TIMELINE_LABELS[l.status] || l.status)}</div>
+                  ${l.note ? `<div class="small muted">${escapeHtml(l.note)}</div>` : ''}
+                </div>
+                <span class="small muted">${escapeHtml(formatTime(l.created_at))}</span>
+              </li>`).join('')}
+          </ol>
+        </section>`;
     }
 
     // ข้อความใต้สถานะ
@@ -109,6 +142,8 @@
 
         ${!FAILED_STATUSES.includes(order.status) ? `<section class="card mt-12">${progressHtml(order.status)}</section>` : ''}
 
+        ${timelineHtml(order)}
+
         <section class="info-grid mt-12">
           <div class="info-tile"><small>เวลารับอาหาร</small><strong>${escapeHtml(formatPickup(order.pickup_time))}</strong><div>${pickupHint(order)}</div></div>
           <div class="info-tile"><small>ร้าน</small><strong>${escapeHtml(order.store_name || '-')}</strong></div>
@@ -125,6 +160,7 @@
                 <div class="small muted">${formatCurrency(it.unit_price)} / ที่</div></div>
               <div class="line-item__price">${formatCurrency(it.subtotal)}</div>
             </div>`).join('')}
+          ${order.note ? `<div class="order-note">${icon('edit', 'icon-sm')}<span>${escapeHtml(order.note)}</span></div>` : ''}
           <div class="sum-total"><span>ยอดรวม</span><strong>${formatCurrency(order.total_amount)}</strong></div>
         </section>
 
@@ -132,8 +168,49 @@
           ${['completed', ...FAILED_STATUSES].includes(order.status)
             ? `<button class="btn btn--lg grow" id="reorderBtn">${icon('repeat', 'icon-sm')}สั่งอีกครั้ง</button>`
             : ''}
+          ${order.status === 'ready' ? `<button class="btn btn--lg btn--green grow" id="pickupBtn">${icon('check', 'icon-sm')}ได้รับอาหารแล้ว</button>` : ''}
+          ${order.status === 'paid' ? `<button class="btn btn--lg btn--ghost grow text-red" id="cancelBtn">${icon('x', 'icon-sm')}ยกเลิกออเดอร์</button>` : ''}
           <a class="btn btn--lg btn--ghost grow" href="stores.html">กลับหน้าแรก</a>
         </div>`;
+
+      const cancelBtn = document.getElementById('cancelBtn');
+      if (cancelBtn) cancelBtn.onclick = async () => {
+        const ok = await confirmDialog({
+          title: 'ยกเลิกออเดอร์?',
+          message: 'ระบบจะคืนเงินให้ (จำลอง) และยกเลิกแล้วย้อนกลับไม่ได้',
+          confirmText: 'ยกเลิกออเดอร์',
+          cancelText: 'ไม่ยกเลิก',
+          danger: true,
+        });
+        if (!ok) return;
+        try {
+          await apiRequest(`/orders/${order.id}/cancel`, { method: 'POST', auth: true });
+          lastStatus = 'cancelled';
+          toast('ยกเลิกออเดอร์แล้ว');
+        } catch (e) {
+          toast(e.message, 'error');
+        }
+        loadOrder();
+      };
+
+      const pickupBtn = document.getElementById('pickupBtn');
+      if (pickupBtn) pickupBtn.onclick = async () => {
+        const ok = await confirmDialog({
+          title: 'ได้รับอาหารแล้วใช่ไหม?',
+          message: 'กดยืนยันเมื่อได้รับอาหารจากร้านแล้วเท่านั้น',
+          confirmText: 'ได้รับแล้ว',
+          cancelText: 'ยังไม่ได้รับ',
+        });
+        if (!ok) return;
+        try {
+          await apiRequest(`/orders/${order.id}/pickup`, { method: 'POST', auth: true });
+          lastStatus = 'completed';
+          toast('ยืนยันรับอาหารแล้ว ทานให้อร่อยนะ 😋');
+        } catch (e) {
+          toast(e.message, 'error');
+        }
+        loadOrder();
+      };
 
       const reorderBtn = document.getElementById('reorderBtn');
       if (reorderBtn) reorderBtn.onclick = async () => {

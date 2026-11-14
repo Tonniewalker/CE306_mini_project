@@ -831,8 +831,8 @@ textarea.input { height: auto; min-height: 80px; padding: 12px 14px; resize: ver
   content: '';
   position: absolute;
   top: 18px;
-  left: -50%;
-  width: 100%;
+  left: calc(-50% + 23px);
+  width: calc(100% - 46px);
   height: 3px;
   background: var(--line-2);
   z-index: -1;
@@ -1763,3 +1763,16 @@ body {
 /* ลิงก์กลับหน้ารวมร้าน + ป้ายสถานะร้านบนหัวหน้าเมนู */
 .back-link { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 0.9rem; font-weight: 600; color: var(--brand-600); }
 .greet p .pill { margin-left: 6px; vertical-align: middle; }
+
+/* หมายเหตุถึงร้าน */
+.order-note { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--amber-50); color: var(--ink-2); font-size: 0.9rem; }
+.ticket__note { margin: 0 0 6px; padding: 4px 8px; border-radius: 8px; background: var(--amber-50); color: var(--ink-2); font-size: 0.82rem; }
+
+/* ไทม์ไลน์สถานะออเดอร์ */
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 0 0 14px 2px; }
+.timeline li:last-child { padding-bottom: 0; }
+.timeline li::before { content: ''; position: absolute; left: 7px; top: 16px; bottom: 0; width: 2px; background: var(--line); }
+.timeline li:last-child::before { display: none; }
+.timeline__dot { flex: none; width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--line); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.timeline li.current .timeline__dot { background: var(--brand); box-shadow: 0 0 0 3px var(--brand-100); }
