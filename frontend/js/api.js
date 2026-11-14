@@ -45,9 +45,9 @@ function clearAuth() {
   localStorage.removeItem('prefood_user');
 }
 
-// เรียก REST API แล้วคืนค่า JSON
-async function apiRequest(path, { method = 'GET', body, auth = false } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
+// เรียก REST API แล้วคืนค่า JSON (ส่งไฟล์ใช้ file แทน body)
+async function apiRequest(path, { method = 'GET', body, file, auth = false } = {}) {
+  const headers = { 'Content-Type': file ? file.type : 'application/json' };
   if (auth) {
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -58,7 +58,7 @@ async function apiRequest(path, { method = 'GET', body, auth = false } = {}) {
     res = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: file || (body ? JSON.stringify(body) : undefined),
     });
   } catch (e) {
     throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบว่ารัน npm start อยู่');
@@ -131,6 +131,36 @@ async function loadStore(id) {
   localStorage.setItem(STORE_KEY, store.id);
   STORE = { ...store, hours: `${store.open_time} – ${store.close_time}` };
   return STORE;
+}
+
+/* ---------------- รูปภาพ ---------------- */
+// ย่อรูปให้ด้านยาวไม่เกิน maxSize แล้วแปลงเป็น JPEG
+async function resizeImage(file, maxSize = 1200, quality = 0.82) {
+  if (!file || !file.type.startsWith('image/')) throw new Error('กรุณาเลือกไฟล์รูปภาพ');
+  let source;
+  try {
+    source = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (e) {
+    throw new Error('เปิดไฟล์รูปนี้ไม่ได้ ลองใช้รูป jpg หรือ png');
+  }
+  const scale = Math.min(1, maxSize / Math.max(source.width, source.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('ย่อรูปไม่สำเร็จ'))), 'image/jpeg', quality)
+  );
+}
+
+// ย่อแล้วอัปโหลดรูป คืนลิงก์รูป
+async function uploadImage(file) {
+  const blob = await resizeImage(file);
+  const data = await apiRequest('/uploads', { method: 'POST', auth: true, file: blob });
+  return data.url;
 }
 
 /* ---------------- รายการโปรด ---------------- */

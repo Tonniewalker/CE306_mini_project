@@ -22,6 +22,28 @@ function detectImage(buf) {
   return null;
 }
 
+// เช็กว่าเป็นลิงก์รูปที่อัปโหลดผ่านระบบ
+function isUploadUrl(url) {
+  return /^\/uploads\/[a-f0-9]{24}\.(jpg|png|webp)$/.test(url);
+}
+
+// ลบไฟล์รูปที่ไม่มีเมนูหรือร้านไหนใช้ (อัปโหลดเกิน 1 ชั่วโมงแล้ว)
+function cleanupUploads(db) {
+  const used = new Set([
+    ...db.prepare('SELECT image_url FROM menu_items WHERE image_url IS NOT NULL').all(),
+    ...db.prepare('SELECT image_url FROM stores WHERE image_url IS NOT NULL').all(),
+  ].map((r) => path.basename(r.image_url)));
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  let removed = 0;
+  for (const name of fs.readdirSync(UPLOAD_DIR)) {
+    const file = path.join(UPLOAD_DIR, name);
+    if (used.has(name) || fs.statSync(file).mtimeMs > hourAgo) continue;
+    fs.rmSync(file, { force: true });
+    removed++;
+  }
+  if (removed) console.log(`Removed ${removed} unused uploaded images`);
+}
+
 // ลบไฟล์รูปที่อัปโหลดไว้
 function removeUpload(url) {
   if (typeof url !== 'string' || !url.startsWith('/uploads/')) return;
@@ -52,3 +74,5 @@ module.exports = router;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.MAX_SIZE_MB = MAX_SIZE_MB;
 module.exports.removeUpload = removeUpload;
+module.exports.isUploadUrl = isUploadUrl;
+module.exports.cleanupUploads = cleanupUploads;

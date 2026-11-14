@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
-const { imageForName } = require('./menu-images');
 
 const DB_PATH = path.join(__dirname, 'prefood.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
@@ -133,6 +132,12 @@ function migrate(db) {
     console.log(`Migrated: status logs for ${noLog.length} orders`);
   }
 
+  // เลิกใช้รูปจากลิงก์เว็บอื่น
+  const external = db
+    .prepare("UPDATE menu_items SET image_url = NULL WHERE image_url IS NOT NULL AND image_url NOT LIKE '/uploads/%'")
+    .run().changes;
+  if (external) console.log(`Migrated: removed ${external} external image links`);
+
   db.exec('CREATE INDEX IF NOT EXISTS idx_menu_store ON menu_items(store_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_store ON orders(store_id)');
 }
@@ -188,7 +193,7 @@ function seed(db) {
   const menuCount = db.prepare('SELECT COUNT(*) AS c FROM menu_items').get().c;
   if (menuCount === 0 && store) {
     const insertMenu = db.prepare(
-      'INSERT INTO menu_items (store_id, name, description, price, category, image_url, is_available) VALUES (?, ?, ?, ?, ?, ?, 1)'
+      'INSERT INTO menu_items (store_id, name, description, price, category, is_available) VALUES (?, ?, ?, ?, ?, 1)'
     );
     const seedItems = [
       ['ข้าวกะเพราหมูสับ', 'ข้าวกะเพราหมูสับไข่ดาว รสจัดจ้าน', 45, 'อาหารจานเดียว'],
@@ -205,7 +210,7 @@ function seed(db) {
       ['น้ำเปล่า', 'น้ำดื่มขวด 600 ml', 10, 'เครื่องดื่ม'],
     ];
     const insertMany = db.transaction((items) => {
-      for (const item of items) insertMenu.run(store.id, ...item, imageForName(item[0]));
+      for (const item of items) insertMenu.run(store.id, ...item);
     });
     insertMany(seedItems);
     console.log(`Seeded ${seedItems.length} menu items`);

@@ -19,6 +19,9 @@ const storeRoutes = require('./routes/stores');
 const orderRoutes = require('./routes/orders');
 const uploadRoutes = require('./routes/uploads');
 
+// ลบรูปที่อัปโหลดแล้วไม่ได้ใช้
+uploadRoutes.cleanupUploads(require('./db/connection'));
+
 const app = express();
 
 app.use(cors());

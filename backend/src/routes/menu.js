@@ -3,7 +3,7 @@ const express = require('express');
 const db = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { requireStore } = require('../middleware/store');
-const { removeUpload } = require('./uploads');
+const { removeUpload, isUploadUrl } = require('./uploads');
 const { DEFAULT_CATEGORY } = require('../db/init');
 
 const router = express.Router();
@@ -46,6 +46,9 @@ router.post('/', (req, res) => {
   }
   const priceError = validatePrice(price);
   if (priceError) return res.status(400).json({ error: priceError });
+  if (cleanText(image_url) && !isUploadUrl(cleanText(image_url))) {
+    return res.status(400).json({ error: 'รูปภาพไม่ถูกต้อง กรุณาอัปโหลดรูปใหม่' });
+  }
 
   const result = db
     .prepare(
@@ -85,6 +88,9 @@ router.put('/:id', (req, res) => {
   if (!name) return res.status(400).json({ error: 'กรุณากรอกชื่อเมนู' });
   const priceError = validatePrice(price);
   if (priceError) return res.status(400).json({ error: priceError });
+  if (imageUrl && imageUrl !== existing.image_url && !isUploadUrl(imageUrl)) {
+    return res.status(400).json({ error: 'รูปภาพไม่ถูกต้อง กรุณาอัปโหลดรูปใหม่' });
+  }
 
   db.prepare(
     `UPDATE menu_items

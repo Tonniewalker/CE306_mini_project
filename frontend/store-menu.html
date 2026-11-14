@@ -150,9 +150,13 @@
               </div>
             </div>
             <div class="field">
-              <label class="label" for="f-img">ลิงก์รูปภาพ (ไม่บังคับ)</label>
-              <input class="input" id="f-img" type="url" value="${escapeHtml(v.image_url || '')}" placeholder="https://...jpg">
-              <p class="hint">ถ้าไม่ใส่ ระบบจะแสดงไอคอนอาหารตามชื่อเมนูแทน</p>
+              <span class="label">รูปเมนู (ไม่บังคับ)</span>
+              <div class="row" style="gap:8px">
+                <label class="btn btn--sm btn--white" for="f-file" id="pickBtn">${icon('image', 'icon-sm')}เลือกรูป</label>
+                <input type="file" id="f-file" accept="image/*" hidden>
+                <button type="button" class="btn btn--sm btn--ghost" id="removeImg">ลบรูป</button>
+              </div>
+              <p class="hint">ถ่ายจากมือถือหรือเลือกจากเครื่องได้เลย ระบบย่อขนาดให้อัตโนมัติ · ไม่มีรูปจะแสดงไอคอนอาหารแทน</p>
             </div>
             <label class="switch">
               <input type="checkbox" id="f-avail" ${v.is_available ? 'checked' : ''}>
@@ -165,13 +169,40 @@
       });
 
       const $ = (id) => modal.el.querySelector('#' + id);
+      let imageUrl = v.image_url || '';
+      let uploading = false;
       const updatePreview = () => {
-        const p = { id: item ? item.id : items.length + 1, name: $('f-name').value, category: $('f-cat').value, image_url: $('f-img').value.trim() };
+        const p = { id: item ? item.id : items.length + 1, name: $('f-name').value, category: $('f-cat').value, image_url: imageUrl };
         $('preview').style.background = foodTint(p);
         $('preview').innerHTML = cover(p);
+        $('removeImg').hidden = !imageUrl;
       };
-      ['f-name', 'f-cat', 'f-img'].forEach((id) => $(id).addEventListener('input', updatePreview));
+      ['f-name', 'f-cat'].forEach((id) => $(id).addEventListener('input', updatePreview));
       updatePreview();
+
+      // เลือกรูปแล้วอัปโหลด
+      $('f-file').addEventListener('change', async () => {
+        const file = $('f-file').files[0];
+        $('f-file').value = '';
+        if (!file) return;
+        uploading = true;
+        hideAlert($('formAlert'));
+        $('pickBtn').classList.add('disabled');
+        $('preview').innerHTML = '<span class="small muted">กำลังอัปโหลดรูป...</span>';
+        try {
+          imageUrl = await uploadImage(file);
+        } catch (err) {
+          showAlert($('formAlert'), err.message);
+        } finally {
+          uploading = false;
+          $('pickBtn').classList.remove('disabled');
+          updatePreview();
+        }
+      });
+      $('removeImg').onclick = () => {
+        imageUrl = '';
+        updatePreview();
+      };
 
       modal.el.querySelector('[data-act="cancel"]').onclick = () => modal.close();
       modal.el.querySelector('[data-act="save"]').onclick = async (e) => {
@@ -180,9 +211,10 @@
           description: $('f-desc').value.trim(),
           price: $('f-price').value === '' ? null : Number($('f-price').value),
           category: $('f-cat').value.trim(),
-          image_url: $('f-img').value.trim(),
+          image_url: imageUrl || null,
           is_available: $('f-avail').checked,
         };
+        if (uploading) return showAlert($('formAlert'), 'รออัปโหลดรูปให้เสร็จก่อน', 'info');
         if (!payload.name) return showAlert($('formAlert'), 'กรุณากรอกชื่อเมนู');
         if (payload.price === null || Number.isNaN(payload.price) || payload.price < 0) return showAlert($('formAlert'), 'กรุณากรอกราคาที่ถูกต้อง');
 
