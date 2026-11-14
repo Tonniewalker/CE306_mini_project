@@ -6,6 +6,13 @@ const db = require('../db/connection');
 
 const router = express.Router();
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// แปลงค่าเป็นข้อความที่ตัดช่องว่างแล้ว (ไม่ใช่ข้อความคืน '')
+function str(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 // สร้าง JWT token
 function signToken(user) {
   return jwt.sign(
@@ -15,18 +22,26 @@ function signToken(user) {
   );
 }
 
-// POST /api/auth/register - สมัครสมาชิกนักศึกษา
+// POST /api/auth/register - สมัครสมาชิก
 router.post('/register', (req, res) => {
-  const { name, email, password } = req.body;
+  const name = str(req.body.name);
+  const email = str(req.body.email).toLowerCase();
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'กรุณากรอกชื่อ อีเมล และรหัสผ่านให้ครบ' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
+  if (name.length > 100) {
+    return res.status(400).json({ error: 'ชื่อยาวเกินไป' });
+  }
+  if (!EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' });
+  }
+  if (password.length < 6 || password.length > 72) {
+    return res.status(400).json({ error: 'รหัสผ่านต้องมี 6–72 ตัวอักษร' });
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email);
   if (existing) {
     return res.status(409).json({ error: 'อีเมลนี้ถูกใช้งานแล้ว' });
   }
@@ -43,13 +58,14 @@ router.post('/register', (req, res) => {
 
 // POST /api/auth/login - เข้าสู่ระบบ
 router.post('/login', (req, res) => {
-  const { email, password } = req.body;
+  const email = str(req.body.email).toLowerCase();
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
 
   if (!email || !password) {
     return res.status(400).json({ error: 'กรุณากรอกอีเมลและรหัสผ่าน' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
   }

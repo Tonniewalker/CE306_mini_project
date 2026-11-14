@@ -3,8 +3,7 @@ require('dotenv').config();
 
 // ตรวจว่าตั้งค่า JWT_SECRET ใน .env แล้ว
 if (!process.env.JWT_SECRET) {
-  console.error('\n[PRE-FOOD] ไม่พบ JWT_SECRET — กรุณาสร้างไฟล์ backend/.env ที่มีบรรทัด:');
-  console.error('  PORT=3000\n  JWT_SECRET=prefood_dev_secret_change_in_production\n  JWT_EXPIRES_IN=7d\n');
+  console.error('\n[PRE-FOOD] ไม่พบ JWT_SECRET — คัดลอกไฟล์ backend/.env.example เป็น backend/.env แล้วรันใหม่\n');
   process.exit(1);
 }
 
@@ -22,6 +21,11 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+// ไม่มี body ให้เป็น object ว่าง
+app.use((req, res, next) => {
+  if (!req.body) req.body = {};
+  next();
+});
 
 // API routes
 app.use('/api/auth', authRoutes);
