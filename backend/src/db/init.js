@@ -31,9 +31,10 @@ function migrate(db) {
     console.log('Migrated: added menu_items.category');
   }
 
-  // เปลี่ยน role ร้านค้าจาก admin เป็น store
+  // ปรับ role ให้เป็น customer / store / admin
   const usersSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get().sql;
-  if (!usersSql.includes("'store'")) {
+  if (!usersSql.includes("'customer'")) {
+    const hadStore = usersSql.includes("'store'");
     db.pragma('foreign_keys = OFF');
     db.transaction(() => {
       db.exec(`
@@ -42,23 +43,28 @@ function migrate(db) {
           name TEXT NOT NULL,
           email TEXT NOT NULL UNIQUE,
           password_hash TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('student', 'store', 'admin')) DEFAULT 'student',
+          role TEXT NOT NULL CHECK (role IN ('customer', 'store', 'admin')) DEFAULT 'customer',
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         INSERT INTO users_new (id, name, email, password_hash, role, created_at)
           SELECT id, name, email, password_hash,
-                 CASE role WHEN 'admin' THEN 'store' ELSE role END, created_at
+                 CASE role WHEN 'student' THEN 'customer'
+                           WHEN 'admin' THEN '${hadStore ? 'admin' : 'store'}'
+                           ELSE role END,
+                 created_at
           FROM users;
         DROP TABLE users;
         ALTER TABLE users_new RENAME TO users;
       `);
-      // เปลี่ยนบัญชีร้านค้าเดิมเป็นบัญชีใหม่
-      db.prepare('UPDATE users SET email = ?, name = ?, password_hash = ? WHERE email = ?').run(
-        STORE_EMAIL, STORE_NAME, bcrypt.hashSync(STORE_PASSWORD, 10), 'admin@prefood.dpu.ac.th'
-      );
+      // บัญชีร้านค้ารุ่นแรก (admin@) เปลี่ยนเป็นบัญชีร้านค้าปัจจุบัน
+      if (!hadStore) {
+        db.prepare('UPDATE users SET email = ?, name = ?, password_hash = ? WHERE email = ?').run(
+          STORE_EMAIL, STORE_NAME, bcrypt.hashSync(STORE_PASSWORD, 10), 'admin@prefood.dpu.ac.th'
+        );
+      }
     })();
     db.pragma('foreign_keys = ON');
-    console.log(`Migrated: role 'admin' -> 'store' (บัญชีร้านค้า: ${STORE_EMAIL} / ${STORE_PASSWORD})`);
+    console.log("Migrated: role 'student' -> 'customer'");
   }
 }
 

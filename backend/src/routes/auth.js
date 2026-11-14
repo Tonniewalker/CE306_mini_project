@@ -49,9 +49,9 @@ router.post('/register', (req, res) => {
   const passwordHash = bcrypt.hashSync(password, 10);
   const result = db
     .prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)')
-    .run(name, email, passwordHash, 'student');
+    .run(name, email, passwordHash, 'customer');
 
-  const user = { id: result.lastInsertRowid, name, email, role: 'student' };
+  const user = { id: result.lastInsertRowid, name, email, role: 'customer' };
   const token = signToken(user);
   res.status(201).json({ token, user });
 });

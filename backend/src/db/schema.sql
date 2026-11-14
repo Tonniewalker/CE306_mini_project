@@ -2,13 +2,13 @@
 
 PRAGMA foreign_keys = ON;
 
--- ผู้ใช้ (นักศึกษา / ร้านค้า)
+-- บัญชีทั้งหมด (ผู้ใช้ / ร้านค้า / admin)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('student', 'store', 'admin')) DEFAULT 'student',
+    role TEXT NOT NULL CHECK (role IN ('customer', 'store', 'admin')) DEFAULT 'customer',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -40,8 +40,8 @@ function findOrder(id) {
     .get(id);
 }
 
-// POST /api/orders - สั่งอาหาร (นักศึกษา)
-router.post('/', authenticate, requireRole('student'), (req, res) => {
+// POST /api/orders - สั่งอาหาร (ผู้ใช้)
+router.post('/', authenticate, requireRole('customer'), (req, res) => {
   const { items, pickup_time } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -121,8 +121,8 @@ router.post('/', authenticate, requireRole('student'), (req, res) => {
   res.status(201).json(attachItems(findOrder(orderId)));
 });
 
-// GET /api/orders/my - ออเดอร์ของฉัน (นักศึกษา)
-router.get('/my', authenticate, requireRole('student'), (req, res) => {
+// GET /api/orders/my - ออเดอร์ของฉัน (ผู้ใช้)
+router.get('/my', authenticate, requireRole('customer'), (req, res) => {
   const orders = db
     .prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC, id DESC')
     .all(req.user.id);

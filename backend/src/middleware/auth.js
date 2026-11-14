@@ -1,6 +1,8 @@
 // ตรวจสอบการล็อกอิน (JWT) และสิทธิ์ตาม role
 const jwt = require('jsonwebtoken');
 
+const ROLES = ['customer', 'store', 'admin'];
+
 // ตรวจ token จาก header Authorization
 function authenticate(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -14,6 +16,10 @@ function authenticate(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    // token รุ่นเก่าที่ role ไม่มีแล้ว ให้ล็อกอินใหม่
+    if (!ROLES.includes(payload.role)) {
+      return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบใหม่' });
+    }
     req.user = payload; // { id, email, role, name }
     next();
   } catch (err) {

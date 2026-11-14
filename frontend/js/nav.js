@@ -1,4 +1,4 @@
-// โครงหน้าที่ใช้ร่วมกัน: แถบนำทางนักศึกษา, ป๊อปอัปล็อกอิน, sidebar ร้านค้า
+// โครงหน้าที่ใช้ร่วมกัน: แถบนำทางผู้ใช้, ป๊อปอัปล็อกอิน, sidebar ร้านค้า
 
 // โลโก้ PRE-FOOD
 function brandHtml(href = 'menu.html') {
@@ -10,16 +10,16 @@ function cartBadge(n) {
   return n > 0 ? `<span class="count-badge" data-cart-badge>${n}</span>` : '<span class="count-badge" data-cart-badge hidden></span>';
 }
 
-/* ---------------- Student shell ---------------- */
-// สร้างแถบนำทางฝั่งนักศึกษา
-function renderStudentShell(active = '') {
+/* ---------------- ฝั่งผู้ใช้ ---------------- */
+// สร้างแถบนำทางฝั่งผู้ใช้
+function renderCustomerShell(active = '') {
   const user = getUser();
   // บัญชีร้านค้าให้ไปหน้าร้านค้า
   if (user && user.role === 'store') {
     location.replace('store-orders.html');
     return;
   }
-  const isStudent = user && user.role === 'student';
+  const isCustomer = user && user.role === 'customer';
   const count = cartCount();
 
   // แถบไอคอนซ้าย (จอใหญ่)
@@ -36,7 +36,7 @@ function renderStudentShell(active = '') {
         ${item('cart', 'cart.html', 'bag', 'ตะกร้า', cartBadge(count))}
       </nav>
       <div class="rail__foot">
-        ${isStudent
+        ${isCustomer
           ? `<span class="avatar" title="${escapeHtml(user.name)}">${escapeHtml(initials(user.name))}</span>
              <button class="rail__item" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}<span>ออก</span></button>`
           : `<button class="rail__item" onclick="openAuthModal('login')" title="เข้าสู่ระบบ">${icon('user')}<span>เข้าสู่ระบบ</span></button>`}
@@ -55,7 +55,7 @@ function renderStudentShell(active = '') {
         ${link('menu', 'menu.html', 'home', 'หน้าแรก')}
         ${link('orders', 'my-orders.html', 'receipt', 'ออเดอร์')}
         ${link('cart', 'cart.html', 'bag', 'ตะกร้า', cartBadge(count))}
-        ${isStudent
+        ${isCustomer
           ? `<button class="nav-link" onclick="handleLogout()" title="ออกจากระบบ" aria-label="ออกจากระบบ">${icon('logout')}</button>`
           : `<button class="btn btn--sm" onclick="openAuthModal('login')">เข้าสู่ระบบ</button>`}
       </nav>`;
@@ -96,7 +96,7 @@ function openAuthModal(mode = 'login', options = {}) {
       <div class="auth-modal__hero">
         <div class="auth-modal__emoji" aria-hidden="true">${isLogin ? '🍜' : '🍛'}</div>
         <div class="brand"><span class="brand__mark">🍱</span><span class="brand__text">PRE<span>-</span>FOOD</span></div>
-        <h2>${isLogin ? 'ยินดีต้อนรับกลับ 👋' : 'สมัครสมาชิกนักศึกษา'}</h2>
+        <h2>${isLogin ? 'ยินดีต้อนรับกลับ 👋' : 'สมัครสมาชิก'}</h2>
         <p>${isLogin ? 'เข้าสู่ระบบเพื่อสั่งอาหารล่วงหน้า ไม่ต้องต่อคิว' : 'สร้างบัญชีฟรี แล้วเริ่มสั่งได้ทันที'}</p>
       </div>
       <div class="auth-modal__body">

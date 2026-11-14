@@ -77,13 +77,13 @@
     const params = new URLSearchParams(location.search);
     const user = getUser();
     let activeTab = params.get('tab') === 'fav' ? 'fav' : 'all';
-    renderStudentShell('menu');
+    renderCustomerShell('menu');
 
     let menuItems = [];
     let queue = { waiting: 0, ready: 0 };
     let activeOrder = null;
 
-    if (user && user.role === 'student') {
+    if (user && user.role === 'customer') {
       document.getElementById('greetTitle').textContent = `สวัสดี, ${user.name.split(' ')[0]} 👋`;
     }
 
@@ -418,7 +418,7 @@
     // โหลดออเดอร์ที่ยังไม่เสร็จ
     async function loadActiveOrder() {
       const u = getUser();
-      if (!u || u.role !== 'student' || !getToken()) return;
+      if (!u || u.role !== 'customer' || !getToken()) return;
       try {
         const orders = await apiRequest('/orders/my', { auth: true });
         activeOrder = orders.find((o) => ACTIVE_STATUSES.includes(o.status)) || null;

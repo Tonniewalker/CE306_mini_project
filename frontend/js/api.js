@@ -19,7 +19,7 @@ const STORE = {
 function getToken() {
   return localStorage.getItem('prefood_token');
 }
-const KNOWN_ROLES = ['student', 'store']; // role ที่หน้าเว็บรองรับ
+const KNOWN_ROLES = ['customer', 'store']; // role ที่หน้าเว็บรองรับ
 // อ่านข้อมูลผู้ใช้ที่ล็อกอินอยู่
 function getUser() {
   try {
