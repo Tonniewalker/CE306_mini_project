@@ -37,8 +37,8 @@ function renderCustomerShell(active = '') {
       </nav>
       <div class="rail__foot">
         ${isCustomer
-          ? `<span class="avatar" title="${escapeHtml(user.name)}">${escapeHtml(initials(user.name))}</span>
-             <button class="rail__item" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}<span>ออก</span></button>`
+          ? `<a class="avatar ${active === 'profile' ? 'avatar--active' : ''}" href="profile.html" title="โปรไฟล์ · ${escapeHtml(user.name)}">${escapeHtml(initials(user.name))}</a>
+             <button class="rail__item logout-btn" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}<span>ออก</span></button>`
           : `<button class="rail__item" onclick="openAuthModal('login')" title="เข้าสู่ระบบ">${icon('user')}<span>เข้าสู่ระบบ</span></button>`}
       </div>`;
   }
@@ -56,7 +56,8 @@ function renderCustomerShell(active = '') {
         ${link('orders', 'my-orders.html', 'receipt', 'ออเดอร์')}
         ${link('cart', 'cart.html', 'bag', 'ตะกร้า', cartBadge(count))}
         ${isCustomer
-          ? `<button class="nav-link" onclick="handleLogout()" title="ออกจากระบบ" aria-label="ออกจากระบบ">${icon('logout')}</button>`
+          ? `${link('profile', 'profile.html', 'user', 'โปรไฟล์')}
+             <button class="nav-link logout-btn" onclick="handleLogout()" title="ออกจากระบบ" aria-label="ออกจากระบบ">${icon('logout')}</button>`
           : `<button class="btn btn--sm" onclick="openAuthModal('login')">เข้าสู่ระบบ</button>`}
       </nav>`;
   }
@@ -270,7 +271,7 @@ function renderPanelShell(kind, active, title, subtitle = '') {
             <div class="tiny ellipsis">${escapeHtml(user.email || '')}</div>
           </div>
         </div>
-        <button onclick="handleLogout()">${icon('logout', 'icon-sm')}ออกจากระบบ</button>
+        <button class="logout-btn" onclick="handleLogout()">${icon('logout', 'icon-sm')}ออกจากระบบ</button>
       </div>`;
   }
 
@@ -286,7 +287,7 @@ function renderPanelShell(kind, active, title, subtitle = '') {
       </div>
       <nav class="store-mobile-nav">
         ${panel.links.map(([key, href, ic, , short]) => mlink(key, href, ic, short)).join('')}
-        <button class="nav-link" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}</button>
+        <button class="nav-link logout-btn" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}</button>
       </nav>`;
   }
 }
@@ -297,6 +298,7 @@ async function handleLogout() {
     title: 'ออกจากระบบ?',
     message: 'คุณต้องการออกจากระบบใช่ไหม',
     confirmText: 'ออกจากระบบ',
+    danger: true,
   });
   if (!ok) return;
   clearAuth();

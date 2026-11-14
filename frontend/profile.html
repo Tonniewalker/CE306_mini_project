@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>โปรไฟล์ · PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside id="rail"></aside>
+    <div class="shell-main">
+      <header id="m-topbar"></header>
+
+      <main class="page page--narrow">
+        <div class="page-head">
+          <span class="avatar avatar--lg" id="bigAvatar"></span>
+          <div>
+            <h1 style="font-size:1.35rem" id="profileName">โปรไฟล์ของฉัน</h1>
+            <div class="small muted" id="profileSince"></div>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="card__title" id="infoTitle">ข้อมูลส่วนตัว</div>
+          <div id="infoAlert" hidden></div>
+          <form id="infoForm" novalidate>
+            <div class="field">
+              <label class="label" for="p-name">ชื่อ-นามสกุล *</label>
+              <input class="input" id="p-name" maxlength="100" autocomplete="name">
+            </div>
+            <div class="field">
+              <label class="label" for="p-email">อีเมล</label>
+              <input class="input" id="p-email" disabled>
+              <p class="hint">อีเมลใช้เข้าสู่ระบบ เปลี่ยนไม่ได้</p>
+            </div>
+            <div class="field">
+              <label class="label" for="p-phone">เบอร์โทร</label>
+              <input class="input" id="p-phone" type="tel" inputmode="tel" maxlength="12" placeholder="เช่น 0812345678" autocomplete="tel">
+              <p class="hint">ไม่บังคับ ร้านใช้ติดต่อเมื่อมีปัญหากับออเดอร์</p>
+            </div>
+            <button class="btn" type="submit" id="infoSave">บันทึกข้อมูล</button>
+          </form>
+        </section>
+
+        <section class="card mt-12">
+          <div class="card__title" id="pwTitle">เปลี่ยนรหัสผ่าน</div>
+          <div id="pwAlert" hidden></div>
+          <form id="pwForm" novalidate>
+            <div class="field">
+              <label class="label" for="pw-current">รหัสผ่านปัจจุบัน</label>
+              <input class="input" id="pw-current" type="password" autocomplete="current-password">
+            </div>
+            <div class="field">
+              <label class="label" for="pw-new">รหัสผ่านใหม่</label>
+              <input class="input" id="pw-new" type="password" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัวอักษร">
+            </div>
+            <div class="field">
+              <label class="label" for="pw-confirm">ยืนยันรหัสผ่านใหม่</label>
+              <input class="input" id="pw-confirm" type="password" autocomplete="new-password">
+            </div>
+            <button class="btn" type="submit" id="pwSave">เปลี่ยนรหัสผ่าน</button>
+          </form>
+        </section>
+
+        <button class="btn btn--ghost btn--block mt-16 text-red" id="logoutBtn">ออกจากระบบ</button>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าโปรไฟล์: แก้ข้อมูลส่วนตัวและเปลี่ยนรหัสผ่าน
+    const user = requireAuth('customer');
+    renderCustomerShell('profile');
+    document.getElementById('infoTitle').insertAdjacentHTML('afterbegin', icon('user'));
+    document.getElementById('pwTitle').insertAdjacentHTML('afterbegin', icon('lock'));
+
+    const $ = (id) => document.getElementById(id);
+
+    // แสดงข้อมูลบัญชี
+    function fill(me) {
+      $('bigAvatar').textContent = initials(me.name);
+      $('profileName').textContent = me.name;
+      $('profileSince').textContent = `${me.email} · สมาชิกตั้งแต่ ${formatDate(me.created_at)}`;
+      $('p-name').value = me.name;
+      $('p-email').value = me.email;
+      $('p-phone').value = me.phone || '';
+    }
+
+    // โหลดข้อมูลบัญชี
+    async function load() {
+      try {
+        fill(await apiRequest('/me', { auth: true }));
+      } catch (err) {
+        showAlert($('infoAlert'), err.message);
+      }
+    }
+
+    // บันทึกชื่อและเบอร์โทร
+    $('infoForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert($('infoAlert'));
+      const name = $('p-name').value.trim();
+      const phone = $('p-phone').value.trim();
+      if (!name) return showAlert($('infoAlert'), 'กรุณากรอกชื่อ');
+      $('infoSave').disabled = true;
+      try {
+        const me = await apiRequest('/me', { method: 'PUT', auth: true, body: { name, phone } });
+        setAuth(getToken(), { ...getUser(), name: me.name });
+        fill(me);
+        renderCustomerShell('profile');
+        showAlert($('infoAlert'), 'บันทึกข้อมูลแล้ว', 'success');
+      } catch (err) {
+        showAlert($('infoAlert'), err.message);
+      } finally {
+        $('infoSave').disabled = false;
+      }
+    });
+
+    // เปลี่ยนรหัสผ่าน
+    $('pwForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert($('pwAlert'));
+      const current = $('pw-current').value;
+      const next = $('pw-new').value;
+      if (!current || !next) return showAlert($('pwAlert'), 'กรุณากรอกรหัสผ่านให้ครบ');
+      if (next.length < 6) return showAlert($('pwAlert'), 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
+      if (next !== $('pw-confirm').value) return showAlert($('pwAlert'), 'ยืนยันรหัสผ่านใหม่ไม่ตรงกัน');
+      $('pwSave').disabled = true;
+      try {
+        await apiRequest('/me/password', { method: 'PUT', auth: true, body: { current_password: current, new_password: next } });
+        $('pwForm').reset();
+        showAlert($('pwAlert'), 'เปลี่ยนรหัสผ่านแล้ว', 'success');
+      } catch (err) {
+        showAlert($('pwAlert'), err.message);
+      } finally {
+        $('pwSave').disabled = false;
+      }
+    });
+
+    $('logoutBtn').addEventListener('click', handleLogout);
+
+    if (user) load();
+  </script>
+</body>
+</html>

@@ -22,6 +22,7 @@ const menuRoutes = require('./routes/menu');
 const storeRoutes = require('./routes/stores');
 const orderRoutes = require('./routes/orders');
 const uploadRoutes = require('./routes/uploads');
+const meRoutes = require('./routes/me');
 
 // ลบรูปที่อัปโหลดแล้วไม่ได้ใช้
 uploadRoutes.cleanupUploads(require('./db/connection'));
@@ -42,6 +43,7 @@ app.use('/api/menu', menuRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/me', meRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'pre-food-api' });

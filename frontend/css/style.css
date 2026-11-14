@@ -1776,3 +1776,17 @@ body {
 .timeline li:last-child::before { display: none; }
 .timeline__dot { flex: none; width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--line); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .timeline li.current .timeline__dot { background: var(--brand); box-shadow: 0 0 0 3px var(--brand-100); }
+
+/* รูปย่อชื่อผู้ใช้ */
+a.avatar { color: var(--brand-700); }
+.avatar--active { box-shadow: 0 0 0 3px var(--brand-100), 0 0 0 5px var(--brand); }
+.avatar--lg { width: 56px; height: 56px; font-size: 1.4rem; }
+
+/* ปุ่มตัวหนังสือสีแดง */
+.btn.text-red { color: var(--red); }
+
+/* ปุ่มออกจากระบบสีแดง */
+.rail__item.logout-btn, .nav-link.logout-btn { color: var(--red); }
+.rail__item.logout-btn:hover, .nav-link.logout-btn:hover { color: var(--red); background: var(--red-50); }
+.sidebar__foot button.logout-btn { color: #ff9b9b; }
+.sidebar__foot button.logout-btn:hover { color: #ffc4c4; background: rgba(255, 90, 90, 0.12); }
