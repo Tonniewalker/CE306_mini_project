@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2a0b6b">
+<title>ออเดอร์ & คิว · ร้านค้า PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="store-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="store-main">
+      <header class="store-topbar" id="store-topbar"></header>
+      <main class="store-content">
+        <section class="stat-grid" id="stats"></section>
+
+        <div class="between wrap board-head">
+          <div>
+            <h2>บอร์ดออเดอร์</h2>
+            <div class="small muted">เรียงตามเวลารับอาหาร · กดปุ่มเพื่อเลื่อนสถานะ</div>
+          </div>
+          <div class="row">
+            <span class="pill pill--ready pill--live"><span class="dot"></span>อัปเดตอัตโนมัติ</span>
+            <button class="btn btn--sm btn--white" id="refreshBtn"></button>
+          </div>
+        </div>
+
+        <section class="kanban" id="kanban"></section>
+
+        <section class="card mt-24">
+          <div class="between" style="margin-bottom:8px">
+            <div class="card__title" style="margin:0">ประวัติวันนี้</div>
+            <span class="small muted" id="historyCount"></span>
+          </div>
+          <div class="table-scroll" id="history"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าร้านค้า: บอร์ดออเดอร์และคิววันนี้
+    const store = requireAuth('store');
+    renderStoreShell('orders', 'ออเดอร์ & คิว', new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+    document.getElementById('refreshBtn').innerHTML = `${icon('refresh', 'icon-sm')}รีเฟรช`;
+
+    const COLUMNS = [
+      { status: 'paid', title: 'ออเดอร์ใหม่', color: 'var(--blue)', next: 'preparing', action: 'รับออเดอร์ · เริ่มทำ', btn: '' },
+      { status: 'preparing', title: 'กำลังทำ', color: 'var(--amber)', next: 'ready', action: 'อาหารพร้อมแล้ว', btn: 'btn--green' },
+      { status: 'ready', title: 'พร้อมรับ', color: 'var(--green)', next: 'completed', action: 'ลูกค้ารับแล้ว', btn: 'btn--white' },
+    ];
+    let knownIds = null; // id ออเดอร์ที่เคยเห็น
+    let busy = false;
+
+    // ป้ายเวลารับ
+    function timeChip(order) {
+      const m = minutesUntil(order.pickup_time);
+      let cls = '', text;
+      if (m < 0) { cls = 'time-chip--late'; text = `เลยเวลา ${-m} นาที`; }
+      else if (m <= 10) { cls = 'time-chip--soon'; text = m === 0 ? 'ถึงเวลารับ' : `อีก ${m} นาที`; }
+      else if (m < 120) text = `อีก ${m} นาที`;
+      else text = formatPickup(order.pickup_time);
+      return `<span class="time-chip ${cls}">${icon('clock', 'icon-sm')}${escapeHtml(text)}</span>`;
+    }
+
+    // บัตรออเดอร์
+    function ticketHtml(o, col, isNew) {
+      const items = o.items.map((it) => `<b>${it.quantity}×</b> ${escapeHtml(it.item_name)}`).join(' · ');
+      return `
+        <article class="ticket ${isNew ? 'ticket--new' : ''}">
+          <div class="ticket__top">
+            <span class="ticket__q">${queueLabel(o.queue_number)}</span>
+            <span class="ticket__who ellipsis">${escapeHtml(o.customer_name || 'ลูกค้า')} · #${o.id}</span>
+            ${timeChip(o)}
+          </div>
+          <div class="ticket__items">${items}</div>
+          <div class="ticket__bottom">
+            <span class="muted">รับ ${escapeHtml(formatTime(o.pickup_time))} · สั่ง ${escapeHtml(formatTime(o.created_at))}</span>
+            <span class="bold">${formatCurrency(o.total_amount)}</span>
+          </div>
+          <div class="ticket__actions">
+            <button class="btn btn--sm ${col.btn}" data-id="${o.id}" data-next="${col.next}">${col.action}</button>
+            ${o.status !== 'ready' ? `<button class="icon-btn icon-btn--danger" data-id="${o.id}" data-cancel="1" title="ยกเลิกออเดอร์" aria-label="ยกเลิกออเดอร์">${icon('x', 'icon-sm')}</button>` : ''}
+          </div>
+        </article>`;
+    }
+
+    // แสดงสรุปยอดและบอร์ดออเดอร์
+    function render(orders) {
+      const now = new Date();
+      const today = orders.filter((o) => isSameDay(parseServerDate(o.created_at), now));
+      const valid = today.filter((o) => o.status !== 'cancelled');
+      const revenue = valid.reduce((s, o) => s + o.total_amount, 0);
+      const count = (st) => orders.filter((o) => o.status === st).length;
+
+      const stat = (emoji, bg, value, label) => `
+        <div class="stat"><div class="stat__icon" style="background:${bg}">${emoji}</div>
+          <div><div class="stat__value">${value}</div><div class="stat__label">${label}</div></div></div>`;
+      document.getElementById('stats').innerHTML =
+        stat('🧾', 'var(--brand-50)', valid.length, 'ออเดอร์วันนี้') +
+        stat('⏳', 'var(--blue-50)', count('paid') + count('preparing'), 'รอทำ / กำลังทำ') +
+        stat('🛎️', 'var(--green-50)', count('ready'), 'รอลูกค้ามารับ') +
+        stat('💰', 'var(--amber-50)', formatCurrency(revenue), 'ยอดขายวันนี้');
+
+      // หาออเดอร์ใหม่
+      const newIds = new Set();
+      if (knownIds) {
+        for (const o of orders) if (o.status === 'paid' && !knownIds.has(o.id)) newIds.add(o.id);
+        if (newIds.size) {
+          toast(`มีออเดอร์ใหม่ ${newIds.size} รายการ 🔔`);
+          document.title = `(${newIds.size}) ออเดอร์ใหม่ · PRE-FOOD`;
+          setTimeout(() => (document.title = 'ออเดอร์ & คิว · ร้านค้า PRE-FOOD'), 6000);
+        }
+      }
+      knownIds = new Set(orders.map((o) => o.id));
+
+      document.getElementById('kanban').innerHTML = COLUMNS.map((col) => {
+        const list = orders
+          .filter((o) => o.status === col.status)
+          .sort((a, b) => parseServerDate(a.pickup_time) - parseServerDate(b.pickup_time));
+        return `
+          <div class="kanban-col">
+            <div class="kanban-col__head">
+              <span class="kanban-col__dot" style="background:${col.color}"></span>${col.title}
+              <span class="count-badge" style="background:${col.color}">${list.length}</span>
+            </div>
+            <div class="kanban-col__list">
+              ${list.length ? list.map((o) => ticketHtml(o, col, newIds.has(o.id))).join('') : '<div class="kanban-empty">ไม่มีออเดอร์</div>'}
+            </div>
+          </div>`;
+      }).join('');
+
+      const done = today.filter((o) => ['completed', 'cancelled'].includes(o.status));
+      document.getElementById('historyCount').textContent = `${done.length} รายการ`;
+      document.getElementById('history').innerHTML = done.length
+        ? `<table class="history-table">
+            <thead><tr><th>คิว</th><th>ลูกค้า</th><th>รายการ</th><th>ยอด</th><th>สถานะ</th><th>อัปเดต</th></tr></thead>
+            <tbody>${done.map((o) => `
+              <tr>
+                <td class="bold">${queueLabel(o.queue_number)}</td>
+                <td>${escapeHtml(o.customer_name || '-')}</td>
+                <td class="muted">${escapeHtml(o.items.map((i) => `${i.item_name} ×${i.quantity}`).join(', '))}</td>
+                <td class="bold">${formatCurrency(o.total_amount)}</td>
+                <td>${statusPill(o.status)}</td>
+                <td class="muted">${escapeHtml(formatTime(o.updated_at))}</td>
+              </tr>`).join('')}</tbody>
+          </table>`
+        : '<p class="small muted">ยังไม่มีออเดอร์ที่เสร็จสิ้นวันนี้</p>';
+    }
+
+    // โหลดออเดอร์วันนี้
+    async function load() {
+      if (busy) return;
+      try {
+        const orders = await apiRequest('/orders?scope=today', { auth: true });
+        render(orders);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    // เปลี่ยนสถานะออเดอร์
+    async function updateStatus(id, status) {
+      busy = true;
+      try {
+        await apiRequest(`/orders/${id}/status`, { method: 'PATCH', auth: true, body: { status } });
+        toast(`อัปเดตออเดอร์ #${id}: ${STATUS[status].label}`);
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        busy = false;
+        load();
+      }
+    }
+
+    document.getElementById('kanban').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-id]');
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      if (btn.dataset.cancel) {
+        const ok = await confirmDialog({
+          title: `ยกเลิกออเดอร์ #${id}?`,
+          message: 'ลูกค้าจะเห็นว่าออเดอร์ถูกยกเลิก การยกเลิกไม่สามารถย้อนกลับได้',
+          confirmText: 'ยกเลิกออเดอร์',
+          cancelText: 'ไม่ใช่ตอนนี้',
+          danger: true,
+        });
+        if (ok) updateStatus(id, 'cancelled');
+        return;
+      }
+      btn.disabled = true;
+      updateStatus(id, btn.dataset.next);
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', load);
+
+    if (store) {
+      load();
+      setInterval(load, 8000);
+    }
+  </script>
+</body>
+</html>

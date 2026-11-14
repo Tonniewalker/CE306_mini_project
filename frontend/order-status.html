@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>สถานะออเดอร์ · PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside id="rail"></aside>
+    <div class="shell-main">
+      <header id="m-topbar"></header>
+
+  <main class="page page--narrow">
+    <div class="page-head">
+      <a class="back-btn" href="my-orders.html" aria-label="กลับไปหน้าออเดอร์ของฉัน" id="backBtn"></a>
+      <div class="grow">
+        <h1 style="font-size:1.35rem" id="pageTitle">สถานะออเดอร์</h1>
+        <div class="small muted" id="lastUpdated">กำลังโหลด...</div>
+      </div>
+      <button class="icon-btn" id="refreshBtn" aria-label="รีเฟรช"></button>
+    </div>
+
+    <div id="content">
+      <div class="skeleton" style="height:190px"></div>
+      <div class="skeleton mt-12" style="height:110px"></div>
+      <div class="skeleton mt-12" style="height:200px"></div>
+    </div>
+  </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าติดตามสถานะออเดอร์
+    const user = requireAuth('student');
+    renderStudentShell('orders');
+    document.getElementById('backBtn').innerHTML = icon('back');
+    document.getElementById('refreshBtn').innerHTML = icon('refresh');
+
+    const orderId = new URLSearchParams(location.search).get('id');
+    const STEPS = [
+      { key: 'paid', label: 'ชำระเงินแล้ว', emoji: '🧾' },
+      { key: 'preparing', label: 'กำลังทำ', emoji: '👨‍🍳' },
+      { key: 'ready', label: 'พร้อมรับ', emoji: '🛎️' },
+      { key: 'completed', label: 'รับแล้ว', emoji: '✅' },
+    ];
+    let lastStatus = null;
+    let currentOrder = null;
+    let stopPolling = false;
+
+    // แถบขั้นตอนสถานะ
+    function progressHtml(status) {
+      const idx = STEPS.findIndex((s) => s.key === status);
+      return `<div class="progress">${STEPS.map((s, i) => {
+        const cls = status === 'completed' || i < idx ? 'done' : i === idx ? 'current' : '';
+        return `<div class="progress__step ${cls}">
+          <div class="progress__dot">${cls === 'done' ? icon('check', 'icon-sm') : s.emoji}</div>
+          <div class="progress__label">${s.label}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    // ข้อความใต้สถานะ
+    function heroSub(order) {
+      if (order.status === 'paid' || order.status === 'preparing') {
+        return order.queue_ahead > 0
+          ? `มีคิวก่อนหน้าคุณ ${order.queue_ahead} ออเดอร์ · ไม่ต้องรีบมาต่อคิว`
+          : 'คุณเป็นคิวถัดไป! ร้านกำลังดูแลออเดอร์ของคุณ';
+      }
+      return STATUS[order.status].desc;
+    }
+
+    // เวลาที่เหลือถึงเวลารับ
+    function pickupHint(order) {
+      if (!['paid', 'preparing', 'ready'].includes(order.status)) return '';
+      const m = minutesUntil(order.pickup_time);
+      if (m > 60) return `<span class="small muted">อีก ${Math.floor(m / 60)} ชม. ${m % 60} นาที</span>`;
+      if (m > 0) return `<span class="small text-brand bold">อีก ${m} นาที</span>`;
+      return `<span class="small text-green bold">ถึงเวลารับแล้ว</span>`;
+    }
+
+    // แสดงรายละเอียดออเดอร์
+    function render(order) {
+      const s = STATUS[order.status] || STATUS.paid;
+      const variant = ['ready', 'completed', 'cancelled'].includes(order.status) ? `status-hero--${order.status}` : '';
+      const animate = ['paid', 'preparing', 'ready'].includes(order.status) ? 'bounce' : '';
+      document.getElementById('pageTitle').textContent = `ออเดอร์ #${order.id}`;
+      document.title = `${s.label} · คิว ${queueLabel(order.queue_number)} · PRE-FOOD`;
+
+      document.getElementById('content').innerHTML = `
+        <section class="status-hero ${variant}">
+          <h1>${s.title}</h1>
+          <p>${escapeHtml(heroSub(order))}</p>
+          <div class="status-hero__queue"><small>เลขคิวรับอาหาร</small><strong>${queueLabel(order.queue_number)}</strong></div>
+          <div class="status-hero__emoji ${animate}" aria-hidden="true">${s.emoji}</div>
+        </section>
+
+        ${order.status !== 'cancelled' ? `<section class="card mt-12">${progressHtml(order.status)}</section>` : ''}
+
+        <section class="info-grid mt-12">
+          <div class="info-tile"><small>เวลารับอาหาร</small><strong>${escapeHtml(formatPickup(order.pickup_time))}</strong><div>${pickupHint(order)}</div></div>
+          <div class="info-tile"><small>จุดรับอาหาร</small><strong>${escapeHtml(STORE.name)}</strong><div class="small muted">${escapeHtml(STORE.location)}</div></div>
+          <div class="info-tile"><small>การชำระเงิน</small><strong>${escapeHtml(PAYMENT_LABELS[order.payment_method] || 'ชำระเงินจำลอง')}</strong><div class="small text-green bold">ชำระแล้ว</div></div>
+          <div class="info-tile"><small>สั่งเมื่อ</small><strong>${escapeHtml(formatDateTime(order.created_at))}</strong></div>
+        </section>
+
+        <section class="card mt-12">
+          <div class="card__title">${icon('receipt')}รายการอาหาร</div>
+          ${order.items.map((it) => `
+            <div class="line-item">
+              ${foodThumb({ name: it.item_name, menu_item_id: it.menu_item_id, image_url: it.image_url }, 'xs')}
+              <div class="grow"><span class="bold text-brand">${it.quantity}×</span> ${escapeHtml(it.item_name)}
+                <div class="small muted">${formatCurrency(it.unit_price)} / ที่</div></div>
+              <div class="line-item__price">${formatCurrency(it.subtotal)}</div>
+            </div>`).join('')}
+          <div class="sum-total"><span>ยอดรวม</span><strong>${formatCurrency(order.total_amount)}</strong></div>
+        </section>
+
+        <div class="row mt-16" style="gap:10px">
+          ${['completed', 'cancelled'].includes(order.status)
+            ? `<button class="btn btn--lg grow" id="reorderBtn">${icon('repeat', 'icon-sm')}สั่งอีกครั้ง</button>`
+            : ''}
+          <a class="btn btn--lg btn--ghost grow" href="menu.html">กลับไปหน้าเมนู</a>
+        </div>`;
+
+      const reorderBtn = document.getElementById('reorderBtn');
+      if (reorderBtn) reorderBtn.onclick = async () => {
+        try {
+          const { added, missing } = await reorder(order);
+          if (!added) return toast('เมนูในออเดอร์นี้ปิดขายหมดแล้ว', 'error');
+          if (missing) toast(`มี ${missing} เมนูปิดขายแล้ว จึงไม่ได้ใส่ตะกร้า`, 'error');
+          location.href = 'cart.html';
+        } catch (e) { toast(e.message, 'error'); }
+      };
+    }
+
+    // โหลดออเดอร์
+    async function loadOrder() {
+      if (!orderId) {
+        document.getElementById('content').innerHTML = `<div class="empty"><div class="empty__emoji">🤔</div><h3>ไม่พบรหัสออเดอร์</h3><p>ลองเปิดจากหน้าออเดอร์ของฉัน</p><a class="btn" href="my-orders.html">ออเดอร์ของฉัน</a></div>`;
+        return;
+      }
+      try {
+        const order = await apiRequest(`/orders/${orderId}`, { auth: true });
+        if (lastStatus && lastStatus !== order.status) {
+          toast(order.status === 'ready' ? 'อาหารของคุณพร้อมรับแล้ว! 🛎️' : `สถานะอัปเดต: ${STATUS[order.status].label}`);
+        }
+        lastStatus = order.status;
+        currentOrder = order;
+        render(order);
+        document.getElementById('lastUpdated').textContent =
+          `อัปเดตอัตโนมัติ · ล่าสุด ${new Date().toLocaleTimeString('th-TH')}`;
+      } catch (err) {
+        if (currentOrder) return toast(err.message, 'error');
+        stopPolling = true; // หยุดรีเฟรช
+        document.getElementById('content').innerHTML = `<div class="empty"><div class="empty__emoji">😵</div><h3>โหลดออเดอร์ไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p><a class="btn" href="my-orders.html">ออเดอร์ของฉัน</a></div>`;
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadOrder);
+    if (user) {
+      loadOrder();
+      setInterval(() => {
+        if (stopPolling) return;
+        if (!currentOrder || ACTIVE_STATUSES.includes(currentOrder.status)) loadOrder();
+      }, 8000);
+    }
+  </script>
+</body>
+</html>

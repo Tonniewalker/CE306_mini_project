@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>ตะกร้า & ชำระเงิน · PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside id="rail"></aside>
+    <div class="shell-main">
+      <header id="m-topbar"></header>
+
+  <main class="page">
+    <div class="page-head">
+      <a class="back-btn" href="menu.html" aria-label="กลับไปหน้าเมนู" id="backBtn"></a>
+      <div>
+        <h1 style="font-size:1.35rem">ยืนยันคำสั่งซื้อ</h1>
+        <div class="small muted">ตรวจสอบรายการ เลือกเวลารับ แล้วชำระเงิน</div>
+      </div>
+    </div>
+
+    <div id="content"></div>
+  </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าตะกร้า: เลือกเวลารับและชำระเงิน
+    const user = requireAuth('student');
+    renderStudentShell('cart');
+    document.getElementById('backBtn').innerHTML = icon('back');
+
+    /* ---------- เวลารับอาหาร ---------- */
+    const toMinutes = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const hhmm = (min) => `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+    const OPEN = toMinutes(STORE.openTime);
+    const CLOSE = toMinutes(STORE.closeTime);
+    const LEAD = STORE.minLeadMinutes;
+
+    let pickupMin = null; // เวลารับที่เลือก (นาที), null = ปิดรับออเดอร์
+
+    // เวลาปัจจุบัน (นาที)
+    function nowMinutes() {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes() + (d.getSeconds() > 0 ? 1 : 0);
+    }
+    // เวลารับเร็วสุดที่เลือกได้
+    function earliestMin() { return Math.max(OPEN, nowMinutes() + LEAD); }
+
+    // ปรับเวลารับให้อยู่ในช่วงที่เลือกได้
+    function syncPickup() {
+      const e = earliestMin();
+      if (e > CLOSE) { pickupMin = null; return; } // ปิดรับออเดอร์แล้ว
+      if (pickupMin === null) pickupMin = Math.ceil(e / 5) * 5; // ค่าเริ่มต้น: เวลาเร็วสุด
+      pickupMin = Math.min(CLOSE, Math.max(e, pickupMin));
+    }
+    // ตั้งเวลารับ
+    function setPickup(min) {
+      pickupMin = Math.min(CLOSE, Math.max(earliestMin(), min));
+      updatePickupUI();
+    }
+    // เวลารับที่เลือก (ISO)
+    function selectedPickupIso() {
+      const d = new Date();
+      d.setHours(Math.floor(pickupMin / 60), pickupMin % 60, 0, 0);
+      return d.toISOString();
+    }
+    // ข้อความบอกเวลาที่เหลือถึงเวลารับ
+    function etaText() {
+      const diff = pickupMin - (new Date().getHours() * 60 + new Date().getMinutes());
+      if (diff >= 60) return `อีกประมาณ ${Math.floor(diff / 60)} ชม.${diff % 60 ? ` ${diff % 60} นาที` : ''}`;
+      return `อีกประมาณ ${diff} นาที`;
+    }
+
+    // ตัวเลือกชั่วโมง
+    function hourOptions() {
+      const e = earliestMin();
+      let html = '';
+      for (let h = Math.floor(e / 60); h <= Math.floor(CLOSE / 60); h++) {
+        html += `<option value="${h}" ${h === Math.floor(pickupMin / 60) ? 'selected' : ''}>${pad2(h)}</option>`;
+      }
+      return html;
+    }
+    // ตัวเลือกนาที
+    function minuteOptions() {
+      const e = earliestMin();
+      const h = Math.floor(pickupMin / 60);
+      let html = '';
+      for (let m = 0; m < 60; m++) {
+        const t = h * 60 + m;
+        if (t < e || t > CLOSE) continue;
+        html += `<option value="${m}" ${m === pickupMin % 60 ? 'selected' : ''}>${pad2(m)}</option>`;
+      }
+      return html;
+    }
+
+    // ส่วนเลือกเวลารับ
+    function pickupHtml() {
+      if (pickupMin === null) {
+        return `
+          <div class="pickup-closed">
+            <div class="pickup-closed__icon">🌙</div>
+            <div>
+              <div class="bold">ตอนนี้ร้านปิดรับออเดอร์แล้ว</div>
+              <div class="small muted">รับอาหารได้ทุกวัน ${STORE.openTime} – ${STORE.closeTime} น. (สั่งได้ถึง ${hhmm(CLOSE - LEAD)} น.)</div>
+            </div>
+          </div>`;
+      }
+      const e = earliestMin();
+      return `
+        <div class="pickup">
+          <div class="pickup__time">
+            <select class="pickup__sel" id="pkHour" aria-label="ชั่วโมง">${hourOptions()}</select>
+            <span class="pickup__colon">:</span>
+            <select class="pickup__sel" id="pkMin" aria-label="นาที">${minuteOptions()}</select>
+            <span class="pickup__unit">น.</span>
+          </div>
+          <div class="pickup__meta">
+            <div class="pickup__eta" id="pkEta">${etaText()}</div>
+            <div class="small muted">สั่งล่วงหน้าอย่างน้อย ${LEAD} นาที</div>
+          </div>
+        </div>
+        <input type="range" class="pickup__range" id="pkRange" min="${e}" max="${CLOSE}" step="1" value="${pickupMin}" aria-label="เลื่อนเพื่อเลือกเวลารับ">
+        <div class="pickup__ticks"><span id="pkFirst">เร็วสุด ${hhmm(e)}</span><span>${STORE.closeTime}</span></div>`;
+    }
+
+    // อัปเดตส่วนเลือกเวลารับ
+    function updatePickupUI() {
+      const $ = (id) => document.getElementById(id);
+      if (!$('pkHour')) return;
+      const e = earliestMin();
+      $('pkHour').innerHTML = hourOptions();
+      $('pkMin').innerHTML = minuteOptions();
+      const range = $('pkRange');
+      range.min = e; range.max = CLOSE; range.value = pickupMin;
+      const span = CLOSE - e;
+      range.style.setProperty('--p', `${span > 0 ? ((pickupMin - e) / span) * 100 : 100}%`);
+      $('pkFirst').textContent = `เร็วสุด ${hhmm(e)}`;
+      $('pkEta').textContent = etaText();
+      $('sumPickup').textContent = formatPickup(selectedPickupIso());
+    }
+
+    /* ---------- Render ---------- */
+    // แสดงตะกร้าและสรุปยอด
+    function render() {
+      const items = Object.values(getCart());
+      const content = document.getElementById('content');
+
+      if (items.length === 0) {
+        content.innerHTML = `
+          <div class="empty" style="max-width:520px;margin:20px auto">
+            <div class="empty__emoji">🛒</div>
+            <h3>ตะกร้ายังว่างอยู่</h3>
+            <p>เลือกเมนูที่อยากทาน แล้วกลับมาชำระเงินที่นี่</p>
+            <a class="btn" href="menu.html">${icon('utensils', 'icon-sm')}ไปเลือกเมนู</a>
+          </div>`;
+        return;
+      }
+
+      const count = cartCount();
+      const total = cartTotal();
+      const closed = pickupMin === null;
+
+      content.innerHTML = `
+        <div class="checkout-layout">
+          <div class="stack" style="gap:12px">
+            <section class="card">
+              <div class="row" style="gap:12px">
+                <div class="store-card__logo" style="width:48px;height:48px;font-size:24px">🍳</div>
+                <div class="grow">
+                  <div class="bold">${escapeHtml(STORE.name)}</div>
+                  <div class="small muted row" style="gap:4px">${icon('pin', 'icon-sm')}${escapeHtml(STORE.location)}</div>
+                </div>
+                <span class="pill pill--brand">รับเองที่ร้าน</span>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card__title">${icon('clock')}เลือกเวลารับอาหาร</div>
+              ${pickupHtml()}
+            </section>
+
+            <section class="card">
+              <div class="between" style="margin-bottom:8px">
+                <div class="card__title" style="margin:0">${icon('bag')}รายการอาหาร (${count})</div>
+                <a class="small bold" href="menu.html">+ เพิ่มเมนู</a>
+              </div>
+              <div id="lineItems">
+                ${items.map((it) => `
+                  <div class="line-item">
+                    ${foodThumb({ ...it, id: it.menu_item_id }, 'sm')}
+                    <div class="grow">
+                      <div class="bold ellipsis">${escapeHtml(it.name)}</div>
+                      <div class="small muted">${formatCurrency(it.price)} / ที่</div>
+                      <div class="qty mt-4">
+                        <button data-act="dec" data-id="${it.menu_item_id}" aria-label="ลด">${it.quantity === 1 ? icon('trash', 'icon-sm') : icon('minus', 'icon-sm')}</button>
+                        <span>${it.quantity}</span>
+                        <button class="plus" data-act="inc" data-id="${it.menu_item_id}" aria-label="เพิ่ม">${icon('plus', 'icon-sm')}</button>
+                      </div>
+                    </div>
+                    <div class="line-item__price">${formatCurrency(it.price * it.quantity)}</div>
+                  </div>`).join('')}
+              </div>
+            </section>
+          </div>
+
+          <aside class="checkout-side">
+            <section class="card">
+              <div class="card__title">${icon('receipt')}สรุปคำสั่งซื้อ</div>
+              <div class="sum-row"><span>ค่าอาหาร (${count} รายการ)</span><span>${formatCurrency(total)}</span></div>
+              <div class="sum-row"><span>รับอาหาร</span><span class="bold" style="color:var(--ink)" id="sumPickup">${closed ? 'ร้านปิดรับออเดอร์' : escapeHtml(formatPickup(selectedPickupIso()))}</span></div>
+              <div class="sum-row"><span>ชำระเงิน</span><span>พร้อมเพย์ QR (จำลอง)</span></div>
+              <div class="sum-total"><span>ยอดชำระ</span><strong>${formatCurrency(total)}</strong></div>
+              <div class="mt-16">
+                <button class="btn btn--lg btn--block btn--shadow" id="payBtn" ${closed ? 'disabled' : ''}>
+                  ${closed ? 'ร้านปิดรับออเดอร์แล้ว' : `ชำระเงิน · ${formatCurrency(total)}`}
+                </button>
+              </div>
+            </section>
+          </aside>
+        </div>`;
+      updatePickupUI();
+    }
+
+    /* ---------- Events ---------- */
+    document.getElementById('content').addEventListener('click', (e) => {
+      const qtyBtn = e.target.closest('[data-act]');
+      if (qtyBtn) {
+        const id = Number(qtyBtn.dataset.id);
+        const item = getCart()[id];
+        if (!item) return;
+        const next = item.quantity + (qtyBtn.dataset.act === 'inc' ? 1 : -1);
+        setCartQty({ id, name: item.name, price: item.price, category: item.category, image_url: item.image_url }, next);
+        if (next === 0) toast(`นำ ${item.name} ออกจากตะกร้าแล้ว`);
+        render();
+        return;
+      }
+
+      if (e.target.closest('#payBtn')) startPayment();
+    });
+
+    // เลือกชั่วโมง / นาที / เลื่อนแถบเวลา
+    document.getElementById('content').addEventListener('change', (e) => {
+      if (e.target.id === 'pkHour') {
+        const h = Number(e.target.value);
+        setPickup(h * 60 + (h * 60 === CLOSE ? 0 : pickupMin % 60));
+      } else if (e.target.id === 'pkMin') {
+        setPickup(Math.floor(pickupMin / 60) * 60 + Number(e.target.value));
+      }
+    });
+    document.getElementById('content').addEventListener('input', (e) => {
+      if (e.target.id === 'pkRange') setPickup(Number(e.target.value));
+    });
+
+    /* ---------- ชำระเงิน (จำลอง) ---------- */
+    // สร้างรูป QR จำลอง
+    function mockQrSvg(seed) {
+      const n = 25;
+      let x = seed * 9301 + 49297;
+      const rand = () => { x = (x * 9301 + 49297) % 233280; return x / 233280; };
+      const finder = (r, c) => {
+        const inBox = (r0, c0) => r >= r0 && r < r0 + 7 && c >= c0 && c < c0 + 7;
+        return inBox(0, 0) || inBox(0, n - 7) || inBox(n - 7, 0);
+      };
+      let rects = '';
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (finder(r, c)) continue;
+          if (rand() > 0.52) rects += `<rect x="${c}" y="${r}" width="1" height="1"/>`;
+        }
+      }
+      const fp = (x0, y0) => `<rect x="${x0}" y="${y0}" width="7" height="7" fill="#111"/><rect x="${x0 + 1}" y="${y0 + 1}" width="5" height="5" fill="#fff"/><rect x="${x0 + 2}" y="${y0 + 2}" width="3" height="3" fill="#111"/>`;
+      return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" shape-rendering="crispEdges" role="img" aria-label="QR จำลอง">
+        <rect x="-1" y="-1" width="${n + 2}" height="${n + 2}" fill="#fff"/>
+        <g fill="#111">${rects}</g>${fp(0, 0)}${fp(n - 7, 0)}${fp(0, n - 7)}</svg>`;
+    }
+
+    // เปิดหน้าต่างชำระเงินและส่งออเดอร์
+    function startPayment() {
+      const total = cartTotal();
+      if (total <= 0) return;
+      syncPickup();
+      if (pickupMin === null) { render(); toast('ร้านปิดรับออเดอร์แล้ว', 'error'); return; }
+      const pickupIso = selectedPickupIso();
+
+      const body = `
+        <div class="qr-box">
+          <div class="qr-box__brand">PromptPay</div>
+          ${mockQrSvg(Date.now() % 1000)}
+        </div>
+        <div class="qr-amount">${formatCurrency(total)}</div>
+        <p class="small muted" style="text-align:center">QR จำลองสำหรับทดสอบ · หมดอายุใน <b id="countdown">05:00</b></p>`;
+
+      let timer = null;
+      const modal = openModal({
+        title: 'สแกนเพื่อชำระเงิน',
+        body,
+        foot: `<button class="btn btn--ghost" data-act="cancel">ยกเลิก</button>
+               <button class="btn btn--green" data-act="confirm">ชำระเงินแล้ว</button>`,
+        onClose: () => clearInterval(timer),
+      });
+
+      // นับถอยหลังอายุ QR
+      let left = 300;
+      timer = setInterval(() => {
+        left -= 1;
+        const el = document.getElementById('countdown');
+        if (el) el.textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+        if (left <= 0) { modal.close(); toast('QR หมดอายุ กรุณาลองใหม่', 'error'); }
+      }, 1000);
+
+      modal.el.querySelector('[data-act="cancel"]').onclick = () => modal.close();
+      modal.el.querySelector('[data-act="confirm"]').onclick = async () => {
+        clearInterval(timer);
+        modal.setDismissible(false);
+        modal.setTitle('กำลังดำเนินการ');
+        modal.setBody(`<div style="text-align:center;padding:16px 0"><div class="spinner"></div><p class="bold mt-12">กำลังตรวจสอบการชำระเงิน...</p><p class="small muted">กรุณาอย่าปิดหน้านี้</p></div>`);
+        modal.setFoot('');
+
+        try {
+          const items = Object.values(getCart()).map((i) => ({ menu_item_id: i.menu_item_id, quantity: i.quantity }));
+          const [order] = await Promise.all([
+            apiRequest('/orders', { method: 'POST', auth: true, body: { items, pickup_time: pickupIso } }),
+            new Promise((r) => setTimeout(r, 1200)), // จำลองเวลาตรวจสอบ
+          ]);
+          clearCart();
+          modal.setTitle('');
+          modal.setBody(`
+            <div style="text-align:center;padding:8px 0 4px">
+              <div class="success-check">${icon('check')}</div>
+              <h2>ชำระเงินสำเร็จ!</h2>
+              <p class="muted mt-4">ส่งออเดอร์ถึงร้านแล้ว</p>
+              <div class="status-hero__queue" style="background:var(--brand-50);border-color:var(--brand-100);color:var(--brand-700)">
+                <small>เลขคิวของคุณ</small><strong>${queueLabel(order.queue_number)}</strong>
+              </div>
+              <p class="small muted mt-12">รับอาหาร${escapeHtml(formatPickup(order.pickup_time))}</p>
+            </div>`);
+          modal.setFoot(`<a class="btn btn--block" href="order-status.html?id=${order.id}">ติดตามออเดอร์</a>`);
+          setTimeout(() => (location.href = `order-status.html?id=${order.id}`), 2500);
+        } catch (err) {
+          modal.setDismissible(true);
+          modal.setTitle('ชำระเงินไม่สำเร็จ');
+          modal.setBody(`<div class="alert alert--error">${icon('alert')}<span>${escapeHtml(err.message)}</span></div><p class="small muted">ยังไม่มีการตัดเงิน ลองตรวจสอบตะกร้าแล้วลองใหม่อีกครั้ง</p>`);
+          modal.setFoot(`<button class="btn btn--block" data-act="close">กลับไปที่ตะกร้า</button>`);
+          modal.el.querySelector('[data-act="close"]').onclick = () => { modal.close(); syncCartWithMenu(); };
+        }
+      };
+    }
+
+    /* ---------- ซิงก์ตะกร้ากับเมนูล่าสุด ---------- */
+    // อัปเดตราคาและเอาเมนูที่ปิดขายออกจากตะกร้า
+    async function syncCartWithMenu() {
+      try {
+        const menu = await apiRequest('/menu');
+        const byId = new Map(menu.map((m) => [m.id, m]));
+        const cart = getCart();
+        let removed = 0;
+        for (const id of Object.keys(cart)) {
+          const m = byId.get(Number(id));
+          if (!m) { delete cart[id]; removed++; continue; }
+          Object.assign(cart[id], { name: m.name, price: m.price, category: m.category, image_url: m.image_url });
+        }
+        saveCart(cart);
+        if (removed) toast(`มี ${removed} เมนูปิดขายแล้ว จึงถูกนำออกจากตะกร้า`, 'error', 3500);
+      } catch (e) { /* ใช้ข้อมูลในตะกร้าเดิม */ }
+      render();
+    }
+
+    // เริ่มต้นหน้า
+    function init() {
+      syncPickup();
+      render();
+      syncCartWithMenu();
+      // อัปเดตเวลาที่เลือกได้ทุก 20 วินาที
+      setInterval(() => {
+        const wasClosed = pickupMin === null;
+        syncPickup();
+        if (wasClosed !== (pickupMin === null)) { if (!document.querySelector('.modal-backdrop')) render(); }
+        else if (pickupMin !== null) updatePickupUI();
+      }, 20000);
+    }
+
+    if (user) init();
+  </script>
+</body>
+</html>

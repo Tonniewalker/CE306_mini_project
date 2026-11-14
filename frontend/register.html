@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>PRE-FOOD</title>
+<!-- เปลี่ยนไปเปิดป๊อปอัปสมัครสมาชิกที่หน้าเมนู -->
+<script>
+  var q = new URLSearchParams(location.search);
+  q.set('auth', 'register');
+  location.replace('menu.html?' + q.toString());
+</script>
+</head>
+<body><a href="menu.html?auth=register">ไปหน้าเข้าสู่ระบบ</a></body>
+</html>

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>PRE-FOOD · สั่งอาหารล่วงหน้า</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell shell--panel">
+    <aside id="rail"></aside>
+
+    <div class="shell-main">
+      <header id="m-topbar"></header>
+
+      <main class="main-wrap">
+        <div class="greet">
+          <h1 id="greetTitle">สั่งล่วงหน้าเลย ไม่ต้องต่อคิว</h1>
+          <!-- <p>สั่งล่วงหน้า แล้วมารับตามเวลา ไม่ต้องต่อคิว</p> -->
+        </div>
+
+        <div class="search-xl">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input class="input" type="search" id="search" placeholder="อยากทานอะไรดี? ค้นหาเมนู เช่น กะเพรา, ชาไทย" autocomplete="off" aria-label="ค้นหาเมนู">
+        </div>
+
+        <!-- ออเดอร์ที่กำลังทำ (จอเล็ก) -->
+        <a id="activeOrder" class="mini-active hide-xl" style="margin:14px 0 0" hidden></a>
+
+        <!-- แบนเนอร์โปรโมชัน -->
+        <section class="promo" id="promo" aria-roledescription="carousel"></section>
+
+        <!-- แท็บหมวดหมู่ -->
+        <nav class="cat-tabs" id="catTabs" aria-label="หมวดหมู่อาหาร"></nav>
+
+        <div class="list-head">
+          <h2 id="listTitle">เมนูทั้งหมด</h2>
+          <select class="select" id="sort" aria-label="เรียงลำดับ">
+            <option value="default">เรียง: แนะนำ</option>
+            <option value="price-asc">ราคา ต่ำ → สูง</option>
+            <option value="price-desc">ราคา สูง → ต่ำ</option>
+          </select>
+        </div>
+
+        <section class="tile-grid" id="grid">
+          <div class="skeleton" style="aspect-ratio:4/3"></div>
+          <div class="skeleton" style="aspect-ratio:4/3"></div>
+          <div class="skeleton" style="aspect-ratio:4/3"></div>
+        </section>
+        <div style="height:80px" class="hide-xl"></div>
+      </main>
+    </div>
+
+    <!-- แผงขวา: ออเดอร์ของฉัน -->
+    <aside class="order-panel" id="orderPanel" aria-label="ออเดอร์ของฉัน"></aside>
+  </div>
+
+  <!-- แถบตะกร้า (จอเล็ก) -->
+  <div class="cart-bar" id="cartBar">
+    <a href="cart.html" data-checkout>
+      <span class="cart-bar__count" id="cartBarCount">0</span>
+      <span>ดูตะกร้า</span>
+      <span class="cart-bar__total" id="cartBarTotal">฿0</span>
+    </a>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าเมนู: ดูเมนู ค้นหา และใส่ตะกร้า
+    const params = new URLSearchParams(location.search);
+    const user = getUser();
+    let activeTab = params.get('tab') === 'fav' ? 'fav' : 'all';
+    renderStudentShell('menu');
+
+    let menuItems = [];
+    let queue = { waiting: 0, ready: 0 };
+    let activeOrder = null;
+
+    if (user && user.role === 'student') {
+      document.getElementById('greetTitle').textContent = `สวัสดี, ${user.name.split(' ')[0]} 👋`;
+    }
+
+    /* ---------- เปิดป๊อปอัปล็อกอินจาก ?auth= ---------- */
+    if (params.get('auth') && !(user && getToken())) {
+      const next = params.get('next');
+      openAuthModal(params.get('auth') === 'register' ? 'register' : 'login', {
+        next,
+        message: params.get('expired') ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
+          : next ? 'กรุณาเข้าสู่ระบบก่อนใช้งานส่วนนี้' : '',
+      });
+    }
+
+    // ไปหน้าชำระเงิน (ยังไม่ล็อกอินให้ล็อกอินก่อน)
+    function goCheckout(e) {
+      if (e) e.preventDefault();
+      if (!cartCount()) return;
+      if (!getUser() || !getToken()) {
+        openAuthModal('login', { next: 'cart.html', message: 'เข้าสู่ระบบก่อนชำระเงิน ตะกร้าของคุณยังอยู่ครบ' });
+        return;
+      }
+      location.href = 'cart.html';
+    }
+
+    /* ---------- แบนเนอร์ ---------- */
+    let slide = 0;
+    let slideTimer = null;
+    // ข้อมูลสไลด์แบนเนอร์
+    function promoSlides() {
+      const eta = Math.max(5, queue.waiting * STORE.minutesPerOrder);
+      return [
+        { eyebrow: '⏱️ PRE-FOOD', title: 'สั่งก่อน<br>ไม่ต้องต่อคิว', text: 'เลือกเวลารับเองได้ ไม่ต้องยืนรอหน้าร้าน', cta: 'เริ่มสั่งเลย', art: ['🍛', '🧋', '🥢'] },
+        // { eyebrow: '🔴 คิวตอนนี้', title: `รอทำ ${queue.waiting} ออเดอร์`, text: `รอประมาณ ~${eta} นาที · พร้อมรับ ${queue.ready} ออเดอร์`, cta: 'ดูเมนู', art: ['🍜', '🛎️', '⏱️'] },
+        { eyebrow: '🔴 คิวตอนนี้', title: `รอทำ ${queue.waiting} ออเดอร์`, cta: 'ดูเมนู', art: ['🍜', '🛎️', '⏱️'] },
+
+      ];
+    }
+    // แสดงแบนเนอร์
+    function renderPromo() {
+      const slides = promoSlides();
+      document.getElementById('promo').innerHTML = slides.map((s, i) => `
+        <div class="promo__slide ${i === slide ? 'active' : ''}" aria-hidden="${i !== slide}">
+          <div class="promo__text">
+            <span class="promo__eyebrow">${s.eyebrow}</span>
+            <h2>${s.title}</h2>
+            <p>${escapeHtml(s.text)}</p>
+            <button class="btn btn--sm" data-promo ${i !== slide ? 'tabindex="-1"' : ''}>${s.cta} ${icon('next', 'icon-sm')}</button>
+          </div>
+          <div class="promo__art" aria-hidden="true"><span class="a1">${s.art[0]}</span><span class="a2">${s.art[1]}</span><span class="a3">${s.art[2]}</span></div>
+        </div>`).join('') +
+        `<div class="promo__dots">${slides.map((_, i) => `<button class="${i === slide ? 'active' : ''}" data-dot="${i}" aria-label="สไลด์ ${i + 1}"></button>`).join('')}</div>`;
+    }
+    // ไปที่สไลด์ i
+    function goSlide(i) {
+      const n = promoSlides().length; // จำนวนสไลด์ในแบนเนอร์
+      slide = (i + n) % n;
+      renderPromo();
+    }
+    // เลื่อนสไลด์อัตโนมัติ
+    function startSlides() {
+      clearInterval(slideTimer);
+      slideTimer = setInterval(() => goSlide(slide + 1), 5000);
+    }
+    const promoEl = document.getElementById('promo');
+    promoEl.addEventListener('mouseenter', () => clearInterval(slideTimer));
+    promoEl.addEventListener('mouseleave', startSlides);
+    promoEl.addEventListener('click', (e) => {
+      const dot = e.target.closest('[data-dot]');
+      if (dot) { goSlide(Number(dot.dataset.dot)); startSlides(); return; }
+      const cta = e.target.closest('[data-promo]');
+      if (!cta) return;
+      document.getElementById('catTabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    /* ---------- แท็บหมวดหมู่ ---------- */
+    // หมวดหมู่ที่มีในเมนู
+    function categoriesOf(items) {
+      return [...new Set(items.map((i) => i.category || 'อื่นๆ'))].sort((a, b) => {
+        const ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+    }
+    // รายการแท็บ
+    function tabDefs() {
+      const favs = getFavs();
+      const defs = [
+        { key: 'all', label: 'ทั้งหมด', ic: icon('grid'), title: 'เมนูทั้งหมด', filter: () => true },
+        { key: 'fav', label: 'รายการโปรด', ic: icon('heart'), title: '❤️ รายการโปรด', filter: (i) => favs.has(i.id) },
+      ];
+      for (const c of categoriesOf(menuItems)) {
+        defs.push({ key: 'cat:' + c, label: c, ic: CATEGORY_EMOJI[c] || '🍽️', title: `${CATEGORY_EMOJI[c] || '🍽️'} ${c}`, filter: (i) => (i.category || 'อื่นๆ') === c });
+      }
+      return defs;
+    }
+    // แสดงแท็บ
+    function renderTabs() {
+      document.getElementById('catTabs').innerHTML = tabDefs().map((t) => {
+        const n = menuItems.filter(t.filter).length;
+        return `<button class="cat-tab ${activeTab === t.key ? 'active' : ''}" data-tab="${escapeHtml(t.key)}">
+          <span class="cat-tab__ic">${t.ic}</span>${escapeHtml(t.label)}<span class="count">${n}</span></button>`;
+      }).join('');
+      const active = document.querySelector('.cat-tab.active');
+      // เลื่อนให้เห็นแท็บที่เลือก
+      if (active) active.parentElement.scrollLeft = active.offsetLeft - 16;
+    }
+    // เปลี่ยนแท็บ
+    function setTab(key) {
+      activeTab = key;
+      renderTabs();
+      renderGrid();
+    }
+    document.getElementById('catTabs').addEventListener('click', (e) => {
+      const t = e.target.closest('[data-tab]');
+      if (t) setTab(t.dataset.tab);
+    });
+
+    /* ---------- การ์ดอาหาร ---------- */
+    // สีพื้นการ์ดเมนู
+    function tileGradient(item) {
+      return `linear-gradient(150deg, ${foodTint(item)} 0%, #ffffff 120%)`;
+    }
+    // ปุ่มเพิ่ม/ลดจำนวน
+    function controlHtml(item) {
+      const qty = cartQty(item.id);
+      return qty > 0
+        ? `<div class="qty">
+             <button data-action="dec" data-id="${item.id}" aria-label="ลด ${escapeHtml(item.name)}">${icon('minus', 'icon-sm')}</button>
+             <span>${qty}</span>
+             <button class="plus" data-action="inc" data-id="${item.id}" aria-label="เพิ่ม ${escapeHtml(item.name)}">${icon('plus', 'icon-sm')}</button>
+           </div>`
+        : `<button class="add-btn" data-action="inc" data-id="${item.id}" aria-label="เพิ่ม ${escapeHtml(item.name)} ลงตะกร้า">${icon('plus')}</button>`;
+    }
+    // การ์ดเมนู
+    function tileHtml(item) {
+      const fav = isFav(item.id);
+      const emoji = foodEmoji(item);
+      const visual = item.image_url
+        ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=&quot;emoji&quot;>${emoji}</span>'">`
+        : `<span class="emoji" aria-hidden="true">${emoji}</span>`;
+      return `
+        <article class="tile ${cartQty(item.id) ? 'in-cart' : ''}" data-tile="${item.id}">
+          <div class="tile__img" style="background:${tileGradient(item)}">
+            <button class="fav-btn ${fav ? 'on' : ''}" data-fav="${item.id}" aria-pressed="${fav}" aria-label="${fav ? 'เอาออกจาก' : 'เพิ่มใน'}รายการโปรด">${icon('heart')}</button>
+            ${visual}
+            <div data-control="${item.id}">${controlHtml(item)}</div>
+          </div>
+          <div class="tile__info">
+            <div class="tile__name">${escapeHtml(item.name)}</div>
+            <div class="tile__price">${formatCurrency(item.price)}</div>
+          </div>
+          <div class="tile__meta ellipsis">${escapeHtml(item.category || '')}</div>
+        </article>`;
+    }
+
+    // แสดงรายการเมนู
+    function renderGrid() {
+      const def = tabDefs().find((t) => t.key === activeTab) || tabDefs()[0];
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      let list = menuItems.filter(def.filter).filter((i) =>
+        !q || i.name.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q)
+      );
+      const sort = document.getElementById('sort').value;
+      if (sort === 'price-asc') list.sort((a, b) => a.price - b.price);
+      if (sort === 'price-desc') list.sort((a, b) => b.price - a.price);
+
+      document.getElementById('listTitle').textContent = q ? `ผลการค้นหา "${q}"` : def.title;
+      const grid = document.getElementById('grid');
+      if (!list.length) {
+        const msg = {
+          fav: ['🤍', 'ยังไม่มีรายการโปรด', 'กดรูปหัวใจบนเมนูที่ชอบ แล้วจะมารวมอยู่ที่นี่'],
+        }[activeTab] || ['🔍', q ? `ไม่พบเมนู "${q}"` : 'ไม่มีเมนูในหมวดนี้', 'ลองค้นหาด้วยคำอื่น หรือเลือกหมวดอื่นดูนะ'];
+        grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">${msg[0]}</div><h3>${escapeHtml(msg[1])}</h3><p>${msg[2]}</p>
+          ${activeTab !== 'all' ? `<button class="btn btn--soft" onclick="setTab('all')">ดูเมนูทั้งหมด</button>` : ''}</div>`;
+        return;
+      }
+      grid.innerHTML = list.map(tileHtml).join('');
+    }
+
+    // อัปเดตการ์ดเมนูใบเดียว
+    function refreshTile(id) {
+      const item = menuItems.find((i) => i.id === id);
+      const tile = document.querySelector(`[data-tile="${id}"]`);
+      if (!item || !tile) return;
+      tile.classList.toggle('in-cart', cartQty(id) > 0);
+      tile.querySelector(`[data-control="${id}"]`).innerHTML = controlHtml(item);
+    }
+
+    document.getElementById('grid').addEventListener('click', (e) => {
+      const favBtn = e.target.closest('[data-fav]');
+      if (favBtn) {
+        const on = toggleFav(favBtn.dataset.fav);
+        favBtn.classList.toggle('on', on);
+        favBtn.classList.remove('pop');
+        void favBtn.offsetWidth;
+        favBtn.classList.add('pop');
+        favBtn.setAttribute('aria-pressed', on);
+        toast(on ? 'เพิ่มในรายการโปรดแล้ว ❤️' : 'เอาออกจากรายการโปรดแล้ว');
+        renderTabs();
+        if (activeTab === 'fav') renderGrid();
+        return;
+      }
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      const item = menuItems.find((i) => i.id === id);
+      if (!item) return;
+      const current = cartQty(id);
+      setCartQty(item, btn.dataset.action === 'inc' ? current + 1 : current - 1);
+      if (current === 0) toast(`เพิ่ม ${item.name} ลงตะกร้าแล้ว`);
+      refreshTile(id);
+    });
+
+    document.getElementById('search').addEventListener('input', renderGrid);
+    document.getElementById('sort').addEventListener('change', renderGrid);
+
+    /* ---------- แผงขวา: ออเดอร์ของฉัน ---------- */
+    // กล่องออเดอร์ที่กำลังทำ
+    function activeOrderHtml() {
+      if (!activeOrder) return '';
+      const s = STATUS[activeOrder.status];
+      return `<span style="font-size:26px">${s.emoji}</span>
+        <div class="grow"><div class="bold small">คิว ${queueLabel(activeOrder.queue_number)} · ${s.label}</div>
+        <div class="tiny muted">รับ${escapeHtml(formatPickup(activeOrder.pickup_time))}</div></div>
+        <span class="text-brand">${icon('next', 'icon-sm')}</span>`;
+    }
+
+    // แสดงแผงออเดอร์ของฉัน
+    function renderPanel() {
+      const items = Object.values(getCart());
+      const total = cartTotal();
+      const eta = Math.max(5, queue.waiting * STORE.minutesPerOrder);
+      document.getElementById('orderPanel').innerHTML = `
+        <div class="order-panel__head">
+          <div class="between">
+            <h2>ออเดอร์ของฉัน</h2>
+            ${items.length ? `<button class="btn btn--sm btn--ghost" id="clearCart">ล้าง</button>` : ''}
+          </div>
+          <div class="pickup-box">
+            <small>รับที่ร้าน</small>
+            <div class="place">${escapeHtml(STORE.location)}</div>
+            <div class="meta">
+              <span>${icon('clock')}~${eta} นาที</span>
+              <span>${icon('receipt')}คิว ${queue.waiting} ออเดอร์</span>
+              <span>${icon('store')}${escapeHtml(STORE.hours)}</span>
+            </div>
+          </div>
+        </div>
+        ${activeOrder ? `<a class="mini-active" href="order-status.html?id=${activeOrder.id}">${activeOrderHtml()}</a>` : ''}
+        <div class="order-panel__items">
+          ${items.length ? items.map((it) => `
+            <div class="panel-item">
+              ${foodThumb({ ...it, id: it.menu_item_id })}
+              <div class="grow" style="min-width:0">
+                <div class="between" style="align-items:flex-start">
+                  <div class="panel-item__name">${escapeHtml(it.name)}</div>
+                  <div class="bold">${formatCurrency(it.price * it.quantity)}</div>
+                </div>
+                <div class="tiny muted">${formatCurrency(it.price)} / ที่</div>
+                <div class="panel-item__row">
+                  <button class="remove" data-remove="${it.menu_item_id}" aria-label="ลบ ${escapeHtml(it.name)}">${icon('x')}</button>
+                  <div class="qty">
+                    <button data-pact="dec" data-id="${it.menu_item_id}" aria-label="ลด">${icon('minus', 'icon-sm')}</button>
+                    <span>${it.quantity}</span>
+                    <button class="plus" data-pact="inc" data-id="${it.menu_item_id}" aria-label="เพิ่ม">${icon('plus', 'icon-sm')}</button>
+                  </div>
+                </div>
+              </div>
+            </div>`).join('')
+          : `<div style="text-align:center;padding:40px 10px">
+               <div style="font-size:56px">🛒</div>
+               <h3 class="mt-8">ยังไม่มีเมนูในตะกร้า</h3>
+               <p class="small muted mt-4">กด + บนเมนูที่อยากทานได้เลย</p>
+             </div>`}
+        </div>
+        <div class="order-panel__foot">
+          <div class="sum-row"><span>ค่าอาหาร (${cartCount()} รายการ)</span><span>${formatCurrency(total)}</span></div>
+          <div class="sum-total"><span>รวมทั้งหมด</span><strong>${formatCurrency(total)}</strong></div>
+          <button class="btn btn--lg btn--block btn--shadow mt-12" data-checkout ${items.length ? '' : 'disabled'}>
+            ${items.length ? 'เลือกเวลารับ & ชำระเงิน' : 'เลือกเมนูก่อนนะ'}
+          </button>
+        </div>`;
+    }
+
+    document.getElementById('orderPanel').addEventListener('click', async (e) => {
+      if (e.target.closest('[data-checkout]')) return goCheckout(e);
+      if (e.target.closest('#clearCart')) {
+        const ok = await confirmDialog({ title: 'ล้างตะกร้า?', message: 'เมนูทั้งหมดในตะกร้าจะถูกนำออก', confirmText: 'ล้างตะกร้า', danger: true });
+        if (ok) { clearCart(); renderGrid(); }
+        return;
+      }
+      const rm = e.target.closest('[data-remove]');
+      const qb = e.target.closest('[data-pact]');
+      if (!rm && !qb) return;
+      const id = Number(rm ? rm.dataset.remove : qb.dataset.id);
+      const it = getCart()[id];
+      if (!it) return;
+      const next = rm ? 0 : it.quantity + (qb.dataset.pact === 'inc' ? 1 : -1);
+      setCartQty({ id, name: it.name, price: it.price, category: it.category, image_url: it.image_url }, next);
+      refreshTile(id);
+    });
+    document.querySelector('#cartBar [data-checkout]').addEventListener('click', goCheckout);
+
+    // อัปเดตแถบตะกร้า
+    function updateCartBar() {
+      const count = cartCount();
+      document.getElementById('cartBarCount').textContent = count;
+      document.getElementById('cartBarTotal').textContent = formatCurrency(cartTotal());
+      document.getElementById('cartBar').classList.toggle('show', count > 0);
+    }
+    window.addEventListener('cart:change', () => { updateCartBar(); renderPanel(); });
+
+    /* ---------- โหลดข้อมูล ---------- */
+    // โหลดเมนู
+    async function loadMenu() {
+      try {
+        menuItems = await apiRequest('/menu');
+        renderTabs();
+        renderGrid();
+      } catch (err) {
+        document.getElementById('grid').innerHTML =
+          `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">😵</div><h3>โหลดเมนูไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p><button class="btn" onclick="loadMenu()">ลองใหม่</button></div>`;
+      }
+    }
+    // โหลดจำนวนคิว
+    async function loadQueue() {
+      try {
+        queue = await apiRequest('/orders/queue/status');
+        renderPromo();
+        renderPanel();
+      } catch (e) { /* ไม่ critical */ }
+    }
+    // โหลดออเดอร์ที่ยังไม่เสร็จ
+    async function loadActiveOrder() {
+      const u = getUser();
+      if (!u || u.role !== 'student' || !getToken()) return;
+      try {
+        const orders = await apiRequest('/orders/my', { auth: true });
+        activeOrder = orders.find((o) => ACTIVE_STATUSES.includes(o.status)) || null;
+        const el = document.getElementById('activeOrder');
+        if (activeOrder) {
+          el.href = `order-status.html?id=${activeOrder.id}`;
+          el.innerHTML = activeOrderHtml();
+        }
+        el.hidden = !activeOrder;
+        renderPanel();
+      } catch (e) { /* ignore */ }
+    }
+
+    renderPromo();
+    startSlides();
+    renderPanel();
+    updateCartBar();
+    loadMenu();
+    loadQueue();
+    loadActiveOrder();
+    setInterval(loadQueue, 15000);
+  </script>
+</body>
+</html>

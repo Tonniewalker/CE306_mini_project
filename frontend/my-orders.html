@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>ออเดอร์ของฉัน · PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside id="rail"></aside>
+    <div class="shell-main">
+      <header id="m-topbar"></header>
+
+  <main class="page page--narrow">
+    <div class="page-head">
+      <div>
+        <h1 style="font-size:1.35rem">ออเดอร์ของฉัน</h1>
+        <div class="small muted">ติดตามสถานะและดูประวัติการสั่งอาหาร</div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="active" role="tab">กำลังดำเนินการ <span class="count-badge" id="activeCount">0</span></button>
+      <button class="tab" data-tab="history" role="tab">ประวัติ</button>
+    </div>
+
+    <div id="list">
+      <div class="skeleton" style="height:130px"></div>
+      <div class="skeleton mt-12" style="height:130px"></div>
+    </div>
+  </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าออเดอร์ของฉัน: ออเดอร์ที่กำลังทำและประวัติ
+    const user = requireAuth('student');
+    renderStudentShell('orders');
+
+    let orders = [];
+    let tab = 'active';
+
+    // การ์ดออเดอร์
+    function orderCard(o) {
+      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
+      const names = o.items.map((i) => `${i.item_name}${i.quantity > 1 ? ' ×' + i.quantity : ''}`).join(', ');
+      const thumbs = o.items.slice(0, 3).map((i) => foodThumb({ name: i.item_name, menu_item_id: i.menu_item_id, image_url: i.image_url }, 'sm')).join('');
+      const isActive = ACTIVE_STATUSES.includes(o.status);
+      return `
+        <a class="order-card" href="order-status.html?id=${o.id}">
+          <div class="between">
+            <div>
+              <div class="bold">คิว ${queueLabel(o.queue_number)} <span class="muted small">· ออเดอร์ #${o.id}</span></div>
+              <div class="small muted">${escapeHtml(formatDateTime(o.created_at))}</div>
+            </div>
+            ${statusPill(o.status, { live: isActive })}
+          </div>
+          <div class="row mt-12" style="gap:12px">
+            <div class="order-card__thumbs">${thumbs}</div>
+            <div class="grow">
+              <div class="small ellipsis">${escapeHtml(names)}</div>
+              <div class="small muted">${totalQty} รายการ · รับ${escapeHtml(formatPickup(o.pickup_time))}</div>
+            </div>
+          </div>
+          <hr class="divider divider--dashed">
+          <div class="between">
+            <span class="bold">${formatCurrency(o.total_amount)}</span>
+            ${isActive
+              ? `<span class="row small bold text-brand">ติดตามออเดอร์ ${icon('next', 'icon-sm')}</span>`
+              : `<button class="btn btn--sm btn--soft" data-reorder="${o.id}">${icon('repeat', 'icon-sm')}สั่งอีกครั้ง</button>`}
+          </div>
+        </a>`;
+    }
+
+    // แสดงรายการออเดอร์
+    function render() {
+      const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
+      const history = orders.filter((o) => !ACTIVE_STATUSES.includes(o.status));
+      document.getElementById('activeCount').textContent = active.length;
+      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+
+      const list = tab === 'active' ? active : history;
+      const el = document.getElementById('list');
+      if (list.length === 0) {
+        el.innerHTML = tab === 'active'
+          ? `<div class="empty"><div class="empty__emoji">🍽️</div><h3>ยังไม่มีออเดอร์ที่กำลังทำ</h3><p>หิวแล้วใช่ไหม? สั่งล่วงหน้าได้เลย ไม่ต้องต่อคิว</p><a class="btn" href="menu.html">${icon('utensils', 'icon-sm')}ดูเมนู</a></div>`
+          : `<div class="empty"><div class="empty__emoji">🧾</div><h3>ยังไม่มีประวัติการสั่ง</h3><p>ออเดอร์ที่รับอาหารแล้วจะแสดงที่นี่</p></div>`;
+        return;
+      }
+      el.innerHTML = list.map(orderCard).join('');
+    }
+
+    document.querySelector('.tabs').addEventListener('click', (e) => {
+      const t = e.target.closest('[data-tab]');
+      if (!t) return;
+      tab = t.dataset.tab;
+      render();
+    });
+
+    document.getElementById('list').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-reorder]');
+      if (!btn) return;
+      e.preventDefault(); // ไม่ให้ลิงก์การ์ดทำงาน
+      const order = orders.find((o) => o.id === Number(btn.dataset.reorder));
+      try {
+        const { added, missing } = await reorder(order);
+        if (!added) return toast('เมนูในออเดอร์นี้ปิดขายหมดแล้ว', 'error');
+        if (missing) toast(`มี ${missing} เมนูปิดขายแล้ว จึงไม่ได้ใส่ตะกร้า`, 'error');
+        location.href = 'cart.html';
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+
+    // โหลดออเดอร์ของฉัน
+    async function load() {
+      try {
+        orders = await apiRequest('/orders/my', { auth: true });
+        // ไม่มีออเดอร์ที่กำลังทำ ให้เปิดแท็บประวัติ
+        if (load.first !== false && !orders.some((o) => ACTIVE_STATUSES.includes(o.status)) && orders.length) tab = 'history';
+        load.first = false;
+        render();
+      } catch (err) {
+        document.getElementById('list').innerHTML = `<div class="empty"><div class="empty__emoji">😵</div><h3>โหลดไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p><button class="btn" onclick="load()">ลองใหม่</button></div>`;
+      }
+    }
+
+    if (user) {
+      load();
+      setInterval(load, 15000);
+    }
+  </script>
+</body>
+</html>

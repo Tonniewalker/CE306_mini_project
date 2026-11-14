@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2a0b6b">
+<title>จัดการเมนู · ร้านค้า PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="store-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="store-main">
+      <header class="store-topbar" id="store-topbar"></header>
+      <main class="store-content">
+        <div class="between wrap" style="gap:12px">
+          <div class="input-wrap grow" style="max-width:420px">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="input" type="search" id="search" placeholder="ค้นหาชื่อเมนู">
+          </div>
+          <button class="btn btn--shadow" id="addBtn"></button>
+        </div>
+        <div class="chips" id="chips"></div>
+
+        <section class="store-menu-grid mt-12" id="grid">
+          <div class="skeleton" style="height:260px"></div>
+          <div class="skeleton" style="height:260px"></div>
+          <div class="skeleton" style="height:260px"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <datalist id="categoryList"></datalist>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าร้านค้า: จัดการเมนู
+    const store = requireAuth('store');
+    renderStoreShell('menu', 'จัดการเมนู', '<span id="menuSummary">กำลังโหลด...</span>');
+    document.getElementById('addBtn').innerHTML = `${icon('plus', 'icon-sm')}เพิ่มเมนู`;
+
+    let items = [];
+    let filterCat = 'all';
+
+    // รายการหมวดหมู่
+    function categories() {
+      const set = new Set([...CATEGORY_ORDER, ...items.map((i) => i.category).filter(Boolean)]);
+      return [...set];
+    }
+
+    // รูปเมนู
+    function cover(item) {
+      const emoji = foodEmoji(item);
+      return item.image_url
+        ? `<img src="${escapeHtml(item.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(document.createTextNode('${emoji}'))">`
+        : emoji;
+    }
+
+    // แสดงรายการเมนู
+    function render() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const list = items.filter((i) =>
+        (filterCat === 'all' || i.category === filterCat) && (!q || i.name.toLowerCase().includes(q))
+      );
+      const onCount = items.filter((i) => i.is_available).length;
+      const summary = document.getElementById('menuSummary');
+      if (summary) summary.textContent = `ทั้งหมด ${items.length} เมนู · เปิดขาย ${onCount} · ปิดขาย ${items.length - onCount}`;
+
+      const usedCats = [...new Set(items.map((i) => i.category))];
+      const chip = (key, label) => `<button class="chip ${filterCat === key ? 'active' : ''}" data-chip="${escapeHtml(key)}">${label}</button>`;
+      document.getElementById('chips').innerHTML = chip('all', `ทั้งหมด (${items.length})`) +
+        categories().filter((c) => usedCats.includes(c)).map((c) =>
+          chip(c, `${CATEGORY_EMOJI[c] || '🍽️'} ${escapeHtml(c)} (${items.filter((i) => i.category === c).length})`)).join('');
+      document.getElementById('categoryList').innerHTML = categories().map((c) => `<option value="${escapeHtml(c)}">`).join('');
+
+      const grid = document.getElementById('grid');
+      if (!list.length) {
+        grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">🍽️</div><h3>${items.length ? 'ไม่พบเมนูที่ค้นหา' : 'ยังไม่มีเมนู'}</h3><p>เพิ่มเมนูแรกของร้านได้เลย</p><button class="btn" onclick="openForm()">${icon('plus', 'icon-sm')}เพิ่มเมนู</button></div>`;
+        return;
+      }
+      grid.innerHTML = list.map((item) => `
+        <article class="store-item ${item.is_available ? '' : 'off'}">
+          <div class="store-item__cover" style="background:${foodTint(item)}">
+            ${cover(item)}
+            <span class="pill pill--neutral" style="background:#fff">${escapeHtml(item.category || '-')}</span>
+          </div>
+          <div class="store-item__body">
+            <div class="between" style="align-items:flex-start">
+              <h3>${escapeHtml(item.name)}</h3>
+              <span class="bold" style="font-family:var(--font-display);font-size:1.05rem">${formatCurrency(item.price)}</span>
+            </div>
+            <p class="small muted clamp-2">${escapeHtml(item.description || 'ไม่มีคำอธิบาย')}</p>
+          </div>
+          <div class="store-item__foot">
+            <label class="switch grow">
+              <input type="checkbox" data-toggle="${item.id}" ${item.is_available ? 'checked' : ''}>
+              <span class="switch__track"></span>
+              <span class="small bold">${item.is_available ? 'เปิดขาย' : 'ปิดขาย'}</span>
+            </label>
+            <button class="icon-btn" data-edit="${item.id}" title="แก้ไข" aria-label="แก้ไข ${escapeHtml(item.name)}">${icon('edit', 'icon-sm')}</button>
+            <button class="icon-btn icon-btn--danger" data-delete="${item.id}" title="ลบ" aria-label="ลบ ${escapeHtml(item.name)}">${icon('trash', 'icon-sm')}</button>
+          </div>
+        </article>`).join('');
+    }
+
+    // โหลดเมนูทั้งหมด
+    async function load() {
+      try {
+        items = await apiRequest('/menu/all', { auth: true });
+        render();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    /* ---------- ฟอร์มเพิ่ม/แก้ไข ---------- */
+    // เปิดฟอร์มเพิ่ม/แก้ไขเมนู
+    function openForm(item = null) {
+      const isEdit = !!item;
+      const v = item || { name: '', description: '', price: '', category: 'อาหารจานเดียว', image_url: '', is_available: 1 };
+      const modal = openModal({
+        title: isEdit ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่',
+        body: `
+          <div id="formAlert" hidden></div>
+          <div class="img-preview" id="preview"></div>
+          <form id="menuForm" novalidate>
+            <div class="field">
+              <label class="label" for="f-name">ชื่อเมนู *</label>
+              <input class="input" id="f-name" value="${escapeHtml(v.name)}" placeholder="เช่น ข้าวกะเพราไก่" required>
+            </div>
+            <div class="field">
+              <label class="label" for="f-desc">คำอธิบาย</label>
+              <textarea class="input" id="f-desc" rows="2" placeholder="รายละเอียดสั้นๆ ให้ลูกค้าเห็น">${escapeHtml(v.description || '')}</textarea>
+            </div>
+            <div class="row" style="gap:12px;align-items:flex-start">
+              <div class="field grow">
+                <label class="label" for="f-price">ราคา (บาท) *</label>
+                <input class="input" id="f-price" type="number" min="0" step="1" value="${escapeHtml(v.price)}" placeholder="45" required>
+              </div>
+              <div class="field grow">
+                <label class="label" for="f-cat">หมวดหมู่</label>
+                <input class="input" id="f-cat" list="categoryList" value="${escapeHtml(v.category || '')}" placeholder="อาหารจานเดียว">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="f-img">ลิงก์รูปภาพ (ไม่บังคับ)</label>
+              <input class="input" id="f-img" type="url" value="${escapeHtml(v.image_url || '')}" placeholder="https://...jpg">
+              <p class="hint">ถ้าไม่ใส่ ระบบจะแสดงไอคอนอาหารตามชื่อเมนูแทน</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="f-avail" ${v.is_available ? 'checked' : ''}>
+              <span class="switch__track"></span>
+              <span class="small bold">เปิดขายทันที</span>
+            </label>
+          </form>`,
+        foot: `<button class="btn btn--ghost" data-act="cancel">ยกเลิก</button>
+               <button class="btn" data-act="save">${isEdit ? 'บันทึกการแก้ไข' : 'เพิ่มเมนู'}</button>`,
+      });
+
+      const $ = (id) => modal.el.querySelector('#' + id);
+      const updatePreview = () => {
+        const p = { id: item ? item.id : items.length + 1, name: $('f-name').value, category: $('f-cat').value, image_url: $('f-img').value.trim() };
+        $('preview').style.background = foodTint(p);
+        $('preview').innerHTML = cover(p);
+      };
+      ['f-name', 'f-cat', 'f-img'].forEach((id) => $(id).addEventListener('input', updatePreview));
+      updatePreview();
+
+      modal.el.querySelector('[data-act="cancel"]').onclick = () => modal.close();
+      modal.el.querySelector('[data-act="save"]').onclick = async (e) => {
+        const payload = {
+          name: $('f-name').value.trim(),
+          description: $('f-desc').value.trim(),
+          price: $('f-price').value === '' ? null : Number($('f-price').value),
+          category: $('f-cat').value.trim(),
+          image_url: $('f-img').value.trim(),
+          is_available: $('f-avail').checked,
+        };
+        if (!payload.name) return showAlert($('formAlert'), 'กรุณากรอกชื่อเมนู');
+        if (payload.price === null || Number.isNaN(payload.price) || payload.price < 0) return showAlert($('formAlert'), 'กรุณากรอกราคาที่ถูกต้อง');
+
+        e.target.disabled = true;
+        try {
+          if (isEdit) await apiRequest(`/menu/${item.id}`, { method: 'PUT', auth: true, body: payload });
+          else await apiRequest('/menu', { method: 'POST', auth: true, body: payload });
+          modal.close();
+          toast(isEdit ? 'บันทึกการแก้ไขแล้ว' : `เพิ่ม "${payload.name}" แล้ว`);
+          load();
+        } catch (err) {
+          showAlert($('formAlert'), err.message);
+          e.target.disabled = false;
+        }
+      };
+      setTimeout(() => $('f-name').focus(), 150);
+    }
+
+    /* ---------- Events ---------- */
+    document.getElementById('addBtn').addEventListener('click', () => openForm());
+    document.getElementById('search').addEventListener('input', render);
+    document.getElementById('chips').addEventListener('click', (e) => {
+      const c = e.target.closest('[data-chip]');
+      if (!c) return;
+      filterCat = c.dataset.chip;
+      render();
+    });
+
+    document.getElementById('grid').addEventListener('change', async (e) => {
+      const t = e.target.closest('[data-toggle]');
+      if (!t) return;
+      const id = Number(t.dataset.toggle);
+      const item = items.find((i) => i.id === id);
+      try {
+        await apiRequest(`/menu/${id}`, { method: 'PUT', auth: true, body: { is_available: t.checked } });
+        item.is_available = t.checked ? 1 : 0;
+        toast(`${item.name}: ${t.checked ? 'เปิดขายแล้ว' : 'ปิดขายแล้ว'}`);
+        render();
+      } catch (err) {
+        t.checked = !t.checked;
+        toast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('grid').addEventListener('click', async (e) => {
+      const edit = e.target.closest('[data-edit]');
+      if (edit) return openForm(items.find((i) => i.id === Number(edit.dataset.edit)));
+
+      const del = e.target.closest('[data-delete]');
+      if (!del) return;
+      const item = items.find((i) => i.id === Number(del.dataset.delete));
+      const ok = await confirmDialog({
+        title: `ลบ "${item.name}"?`,
+        message: 'เมนูนี้จะถูกลบออกจากร้านถาวร (ถ้าแค่ของหมดชั่วคราว แนะนำให้ปิดขายแทน)',
+        confirmText: 'ลบเมนู',
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await apiRequest(`/menu/${item.id}`, { method: 'DELETE', auth: true });
+        toast(`ลบ "${item.name}" แล้ว`);
+        load();
+      } catch (err) {
+        toast(err.message, 'error', 4000);
+      }
+    });
+
+    if (store) load();
+  </script>
+</body>
+</html>
