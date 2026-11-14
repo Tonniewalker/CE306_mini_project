@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('customer', 'store', 'admin')) DEFAULT 'customer',
+    phone TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),  -- 0 = ถูกระงับ
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

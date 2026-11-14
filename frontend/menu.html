@@ -92,7 +92,8 @@
       const next = params.get('next');
       openAuthModal(params.get('auth') === 'register' ? 'register' : 'login', {
         next,
-        message: params.get('expired') ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
+        message: params.get('suspended') ? 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'
+          : params.get('expired') ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
           : next ? 'กรุณาเข้าสู่ระบบก่อนใช้งานส่วนนี้' : '',
       });
     }

@@ -19,7 +19,7 @@ const STORE = {
 function getToken() {
   return localStorage.getItem('prefood_token');
 }
-const KNOWN_ROLES = ['customer', 'store']; // role ที่หน้าเว็บรองรับ
+const KNOWN_ROLES = ['customer', 'store', 'admin']; // role ที่หน้าเว็บรองรับ
 // อ่านข้อมูลผู้ใช้ที่ล็อกอินอยู่
 function getUser() {
   try {
@@ -79,10 +79,23 @@ async function apiRequest(path, { method = 'GET', body, auth = false } = {}) {
     window.location.href = 'menu.html?auth=login&expired=1';
     throw new Error((data && data.error) || 'กรุณาเข้าสู่ระบบใหม่');
   }
+  // บัญชีถูกระงับ ให้ออกจากระบบ
+  if (res.status === 403 && auth && data && data.code === 'suspended') {
+    clearAuth();
+    window.location.href = 'menu.html?auth=login&suspended=1';
+    throw new Error(data.error);
+  }
   if (!res.ok) {
     throw new Error((data && data.error) || `เกิดข้อผิดพลาด (${res.status})`);
   }
   return data;
+}
+
+// หน้าแรกของแต่ละ role
+function homePage(role) {
+  if (role === 'store') return 'store-orders.html';
+  if (role === 'admin') return 'admin-dashboard.html';
+  return 'menu.html';
 }
 
 // ตรวจว่าล็อกอินและมี role ที่ต้องการ ถ้าไม่ใช่ให้เปลี่ยนหน้า
@@ -94,7 +107,7 @@ function requireAuth(role) {
     return null;
   }
   if (role && user.role !== role) {
-    window.location.href = user.role === 'store' ? 'store-orders.html' : 'menu.html';
+    window.location.href = homePage(user.role);
     return null;
   }
   return user;

@@ -14,6 +14,11 @@ const STORE_EMAIL = 'store@prefood.dpu.ac.th';
 const STORE_PASSWORD = 'store1234';
 const STORE_NAME = 'PRE-FOOD Kitchen';
 
+// บัญชีผู้ดูแลระบบ
+const ADMIN_EMAIL = 'admin@prefood.dpu.ac.th';
+const ADMIN_PASSWORD = 'admin1234';
+const ADMIN_NAME = 'ผู้ดูแลระบบ';
+
 // อัปเดตฐานข้อมูลเก่าให้ตรงกับ schema ปัจจุบัน
 function migrate(db) {
   // เพิ่มคอลัมน์ category
@@ -66,9 +71,19 @@ function migrate(db) {
     db.pragma('foreign_keys = ON');
     console.log("Migrated: role 'student' -> 'customer'");
   }
+
+  // เพิ่มคอลัมน์ phone และ is_active
+  const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!userCols.includes('phone')) {
+    db.exec('ALTER TABLE users ADD COLUMN phone TEXT');
+  }
+  if (!userCols.includes('is_active')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))');
+    console.log('Migrated: added users.phone, users.is_active');
+  }
 }
 
-// ใส่ข้อมูลตั้งต้น (บัญชีร้านค้า + เมนู)
+// ใส่ข้อมูลตั้งต้น (บัญชีร้านค้า + admin + เมนู)
 function seed(db) {
   // บัญชีร้านค้า
   const existingStore = db.prepare('SELECT id FROM users WHERE email = ?').get(STORE_EMAIL);
@@ -80,6 +95,19 @@ function seed(db) {
       'store'
     );
     console.log(`Seeded store user: ${STORE_EMAIL} / ${STORE_PASSWORD}`);
+  }
+
+  // บัญชี admin
+  const hasAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin'").get();
+  const emailTaken = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(ADMIN_EMAIL);
+  if (!hasAdmin && !emailTaken) {
+    db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)').run(
+      ADMIN_NAME,
+      ADMIN_EMAIL,
+      bcrypt.hashSync(ADMIN_PASSWORD, 10),
+      'admin'
+    );
+    console.log(`Seeded admin user: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   }
 
   // เมนูตัวอย่าง

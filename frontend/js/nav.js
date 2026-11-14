@@ -1,4 +1,4 @@
-// โครงหน้าที่ใช้ร่วมกัน: แถบนำทางผู้ใช้, ป๊อปอัปล็อกอิน, sidebar ร้านค้า
+// โครงหน้าที่ใช้ร่วมกัน: แถบนำทางผู้ใช้, ป๊อปอัปล็อกอิน, sidebar ร้านค้าและ admin
 
 // โลโก้ PRE-FOOD
 function brandHtml(href = 'menu.html') {
@@ -14,9 +14,9 @@ function cartBadge(n) {
 // สร้างแถบนำทางฝั่งผู้ใช้
 function renderCustomerShell(active = '') {
   const user = getUser();
-  // บัญชีร้านค้าให้ไปหน้าร้านค้า
-  if (user && user.role === 'store') {
-    location.replace('store-orders.html');
+  // บัญชีร้านค้า/admin ให้ไปหน้าของตัวเอง
+  if (user && user.role !== 'customer') {
+    location.replace(homePage(user.role));
     return;
   }
   const isCustomer = user && user.role === 'customer';
@@ -112,8 +112,9 @@ function openAuthModal(mode = 'login', options = {}) {
           <button type="submit" class="btn btn--lg btn--block btn--shadow mt-8" id="authSubmit">${isLogin ? 'เข้าสู่ระบบ' : 'สร้างบัญชี'}</button>
         </form>
         ${isLogin
-          ? `<div class="demo-box">🧪 <b>บัญชีทดสอบร้านค้า:</b> store@prefood.dpu.ac.th / store1234
-               <div class="mt-4"><button type="button" id="fillDemo">กรอกให้อัตโนมัติ →</button></div></div>`
+          ? `<div class="demo-box">🧪 <b>บัญชีทดสอบ</b>
+               <div class="mt-4">ร้านค้า: store@prefood.dpu.ac.th / store1234 <button type="button" data-demo="store">กรอก →</button></div>
+               <div class="mt-4">Admin: admin@prefood.dpu.ac.th / admin1234 <button type="button" data-demo="admin">กรอก →</button></div></div>`
           : `<p class="small muted mt-12" style="text-align:center">มีบัญชีอยู่แล้ว? <a href="#" data-mode="login" class="bold">เข้าสู่ระบบ</a></p>`}
       </div>`);
 
@@ -136,11 +137,12 @@ function openAuthModal(mode = 'login', options = {}) {
         btn.innerHTML = icon(show ? 'eyeOff' : 'eye');
       })
     );
-    const demo = modal.el.querySelector('#fillDemo');
-    if (demo) demo.onclick = () => {
-      modal.el.querySelector('#a-email').value = 'store@prefood.dpu.ac.th';
-      modal.el.querySelector('#a-password').value = 'store1234';
-    };
+    modal.el.querySelectorAll('[data-demo]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        modal.el.querySelector('#a-email').value = `${btn.dataset.demo}@prefood.dpu.ac.th`;
+        modal.el.querySelector('#a-password').value = `${btn.dataset.demo}1234`;
+      })
+    );
 
     modal.el.querySelector('#authForm').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -172,8 +174,8 @@ function openAuthModal(mode = 'login', options = {}) {
         : await apiRequest('/auth/register', { method: 'POST', body: { name, email, password } });
       setAuth(data.token, data.user);
       modal.setDismissible(false);
-      if (data.user.role === 'store') {
-        location.href = 'store-orders.html';
+      if (data.user.role !== 'customer') {
+        location.href = homePage(data.user.role);
         return;
       }
       sessionStorage.setItem('prefood_toast', current === 'login' ? `สวัสดี ${data.user.name} 👋` : 'สมัครสมาชิกสำเร็จ ยินดีต้อนรับ!');
@@ -182,7 +184,7 @@ function openAuthModal(mode = 'login', options = {}) {
       else {
         // โหลดหน้าเดิมใหม่
         const url = new URL(location.href);
-        ['auth', 'next', 'expired'].forEach((k) => url.searchParams.delete(k));
+        ['auth', 'next', 'expired', 'suspended'].forEach((k) => url.searchParams.delete(k));
         location.href = url.pathname.split('/').pop() + url.search;
       }
     } catch (err) {
@@ -205,9 +207,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-/* ---------------- ร้านค้า ---------------- */
+/* ---------------- ร้านค้า / admin ---------------- */
+// เมนูใน sidebar ของแต่ละฝั่ง [key, หน้า, ไอคอน, ชื่อเต็ม, ชื่อสั้น]
+const PANELS = {
+  store: {
+    label: 'ร้านค้า',
+    links: [
+      ['orders', 'store-orders.html', 'board', 'ออเดอร์ & คิว', 'ออเดอร์'],
+      ['menu', 'store-menu.html', 'utensils', 'จัดการเมนู', 'เมนู'],
+    ],
+  },
+  admin: {
+    label: 'ผู้ดูแลระบบ',
+    links: [
+      ['dashboard', 'admin-dashboard.html', 'grid', 'ภาพรวม', 'ภาพรวม'],
+    ],
+  },
+};
+
 // สร้าง sidebar และแถบบนฝั่งร้านค้า
 function renderStoreShell(active, title, subtitle = '') {
+  renderPanelShell('store', active, title, subtitle);
+}
+
+// สร้าง sidebar และแถบบนฝั่ง admin
+function renderAdminShell(active, title, subtitle = '') {
+  renderPanelShell('admin', active, title, subtitle);
+}
+
+// สร้าง sidebar และแถบบน
+function renderPanelShell(kind, active, title, subtitle = '') {
+  const panel = PANELS[kind];
+  const home = panel.links[0][1];
   const user = getUser() || {};
   const link = (key, href, ic, label) =>
     `<a class="sidebar__link ${active === key ? 'active' : ''}" href="${href}">${icon(ic)}${label}</a>`;
@@ -215,10 +246,9 @@ function renderStoreShell(active, title, subtitle = '') {
   const sidebar = document.getElementById('sidebar');
   if (sidebar) {
     sidebar.innerHTML = `
-      ${brandHtml('store-orders.html')}
-      <div class="sidebar__label">ร้านค้า</div>
-      ${link('orders', 'store-orders.html', 'board', 'ออเดอร์ & คิว')}
-      ${link('menu', 'store-menu.html', 'utensils', 'จัดการเมนู')}
+      ${brandHtml(home)}
+      <div class="sidebar__label">${panel.label}</div>
+      ${panel.links.map(([key, href, ic, label]) => link(key, href, ic, label)).join('')}
       <div class="sidebar__foot">
         <div class="row">
           <span class="avatar">${escapeHtml(initials(user.name))}</span>
@@ -236,14 +266,13 @@ function renderStoreShell(active, title, subtitle = '') {
     const mlink = (key, href, ic, label) =>
       `<a class="nav-link ${active === key ? 'active' : ''}" href="${href}" title="${label}">${icon(ic)}<span class="hide-xs">${label}</span></a>`;
     topbar.innerHTML = `
-      ${brandHtml('store-orders.html')}
+      ${brandHtml(home)}
       <div class="grow">
         <h1 style="font-size:1.15rem">${escapeHtml(title)}</h1>
         ${subtitle ? `<div class="tiny muted" id="store-subtitle">${subtitle}</div>` : ''}
       </div>
       <nav class="store-mobile-nav">
-        ${mlink('orders', 'store-orders.html', 'board', 'ออเดอร์')}
-        ${mlink('menu', 'store-menu.html', 'utensils', 'เมนู')}
+        ${panel.links.map(([key, href, ic, , short]) => mlink(key, href, ic, short)).join('')}
         <button class="nav-link" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}</button>
       </nav>`;
   }
