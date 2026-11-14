@@ -52,12 +52,17 @@ CREATE TABLE IF NOT EXISTS orders (
     user_id INTEGER NOT NULL REFERENCES users(id),
     store_id INTEGER REFERENCES stores(id),
     status TEXT NOT NULL CHECK (
-        status IN ('pending_payment', 'paid', 'preparing', 'ready', 'completed', 'cancelled')
+        status IN ('pending_payment', 'paid', 'preparing', 'ready', 'completed', 'cancelled', 'rejected', 'no_show')
     ) DEFAULT 'pending_payment',
     pickup_time TEXT NOT NULL,           -- เวลารับอาหาร
     total_amount REAL NOT NULL CHECK (total_amount >= 0),
     payment_method TEXT NOT NULL DEFAULT 'mock',  -- วิธีชำระเงิน
+    payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (
+        payment_status IN ('unpaid', 'paid', 'refunded')
+    ),
     queue_number INTEGER,                -- เลขคิวของวัน
+    cancel_reason TEXT,                  -- เหตุผลที่ยกเลิก/ปฏิเสธ
+    picked_up_at TEXT,                   -- เวลาที่ลูกค้ารับอาหาร
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -73,6 +78,17 @@ CREATE TABLE IF NOT EXISTS order_items (
     subtotal REAL NOT NULL CHECK (subtotal >= 0)
 );
 
+-- ประวัติการเปลี่ยนสถานะออเดอร์
+CREATE TABLE IF NOT EXISTS order_status_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    changed_by INTEGER REFERENCES users(id),  -- null = ระบบ
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_logs_order ON order_status_logs(order_id);

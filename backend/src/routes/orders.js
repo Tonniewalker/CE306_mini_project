@@ -6,7 +6,23 @@ const { requireStore } = require('../middleware/store');
 
 const router = express.Router();
 
-const ORDER_STATUSES = ['pending_payment', 'paid', 'preparing', 'ready', 'completed', 'cancelled'];
+// ร้านเปลี่ยนสถานะได้เฉพาะขั้นถัดไป
+const STORE_TRANSITIONS = {
+  paid: ['preparing', 'rejected'],
+  preparing: ['ready', 'rejected'],
+  ready: ['completed', 'no_show'],
+};
+// ชื่อสถานะสำหรับข้อความแจ้งเตือน
+const STATUS_LABELS = {
+  pending_payment: 'รอชำระเงิน',
+  paid: 'รอร้านรับออเดอร์',
+  preparing: 'กำลังเตรียมอาหาร',
+  ready: 'พร้อมรับอาหาร',
+  completed: 'รับอาหารแล้ว',
+  cancelled: 'ยกเลิกแล้ว',
+  rejected: 'ร้านปฏิเสธ',
+  no_show: 'ไม่มารับ',
+};
 // วิธีชำระเงิน (จำลอง)
 const PAYMENT_METHOD = 'mock_promptpay';
 // แปลง HH:MM เป็นนาทีนับจากเที่ยงคืน
@@ -17,6 +33,13 @@ const toMinutes = (hhmm) => {
 
 // เงื่อนไข SQL: ออเดอร์ที่สร้างวันนี้
 const IS_TODAY = `date(o.created_at, 'localtime') = date('now', 'localtime')`;
+
+// บันทึกประวัติการเปลี่ยนสถานะ
+function logStatus(orderId, status, userId, note = null) {
+  db.prepare('INSERT INTO order_status_logs (order_id, status, changed_by, note) VALUES (?, ?, ?, ?)').run(
+    orderId, status, userId, note
+  );
+}
 
 // ใส่รายการอาหารให้ออเดอร์
 function attachItems(order) {
@@ -118,12 +141,13 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
     // บันทึกออเดอร์ (ชำระแบบจำลอง สถานะเป็น paid ทันที)
     const orderResult = db
       .prepare(
-        `INSERT INTO orders (user_id, store_id, status, pickup_time, total_amount, payment_method, queue_number)
-         VALUES (?, ?, 'paid', ?, ?, ?, ?)`
+        `INSERT INTO orders (user_id, store_id, status, pickup_time, total_amount, payment_method, payment_status, queue_number)
+         VALUES (?, ?, 'paid', ?, ?, ?, 'paid', ?)`
       )
       .run(req.user.id, store.id, pickupDate.toISOString(), totalAmount, PAYMENT_METHOD, lastQueue + 1);
 
     const orderId = orderResult.lastInsertRowid;
+    logStatus(orderId, 'paid', req.user.id);
     const insertItem = db.prepare(
       `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price, quantity, subtotal)
        VALUES (?, ?, ?, ?, ?, ?)`
@@ -171,7 +195,10 @@ router.get('/:id', authenticate, (req, res) => {
       )
       .get(order.id, order.store_id, order.created_at).c;
   }
-  res.json({ ...attachItems(order), queue_ahead: queueAhead });
+  const logs = db
+    .prepare('SELECT status, note, created_at FROM order_status_logs WHERE order_id = ? ORDER BY id')
+    .all(order.id);
+  res.json({ ...attachItems(order), queue_ahead: queueAhead, logs });
 });
 
 // GET /api/orders - ออเดอร์ของร้าน (ร้านค้า) รองรับ ?status= และ ?scope=today
@@ -199,20 +226,56 @@ router.get('/', authenticate, requireRole('store'), requireStore, (req, res) => 
   res.json(orders.map(attachItems));
 });
 
-// PATCH /api/orders/:id/status - เปลี่ยนสถานะออเดอร์ (ร้านค้า)
+// PATCH /api/orders/:id/status - เปลี่ยนสถานะออเดอร์ (ร้านค้า) ส่ง { status, reason }
 router.patch('/:id/status', authenticate, requireRole('store'), requireStore, (req, res) => {
   const { status } = req.body;
-  if (!ORDER_STATUSES.includes(status)) {
-    return res.status(400).json({ error: 'สถานะไม่ถูกต้อง' });
-  }
+  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
   const existing = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.id, req.store.id);
   if (!existing) return res.status(404).json({ error: 'ไม่พบออเดอร์นี้' });
 
-  db.prepare(`UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(
-    status,
-    req.params.id
-  );
-  res.json(attachItems(findOrder(req.params.id)));
+  if (status === existing.status) {
+    return res.status(409).json({ error: 'ออเดอร์นี้อยู่ในสถานะนี้แล้ว' });
+  }
+  const allowed = STORE_TRANSITIONS[existing.status] || [];
+  if (!allowed.includes(status)) {
+    return res.status(409).json({
+      error: `เปลี่ยนสถานะจาก "${STATUS_LABELS[existing.status]}" เป็น "${STATUS_LABELS[status] || status}" ไม่ได้`,
+    });
+  }
+  if (status === 'rejected' && !reason) {
+    return res.status(400).json({ error: 'กรุณาระบุเหตุผลที่ปฏิเสธออเดอร์' });
+  }
+  if (reason.length > 200) {
+    return res.status(400).json({ error: 'เหตุผลยาวเกิน 200 ตัวอักษร' });
+  }
+
+  const rejected = status === 'rejected';
+  const changed = db.transaction(() => {
+    // เปลี่ยนเฉพาะถ้าสถานะยังเหมือนตอนที่อ่าน (กันกดซ้ำจากหลายหน้าจอ)
+    const result = db
+      .prepare(
+        `UPDATE orders
+         SET status = ?, updated_at = datetime('now'),
+             cancel_reason = ?, payment_status = ?,
+             picked_up_at = CASE WHEN ? = 'completed' THEN datetime('now') ELSE picked_up_at END
+         WHERE id = ? AND status = ?`
+      )
+      .run(
+        status,
+        rejected ? reason : existing.cancel_reason,
+        rejected ? 'refunded' : existing.payment_status,
+        status,
+        existing.id,
+        existing.status
+      );
+    if (!result.changes) return false;
+    logStatus(existing.id, status, req.user.id, rejected ? reason : null);
+    return true;
+  })();
+  if (!changed) {
+    return res.status(409).json({ error: 'ออเดอร์นี้ถูกเปลี่ยนสถานะไปแล้ว กรุณารีเฟรช' });
+  }
+  res.json(attachItems(findOrder(existing.id)));
 });
 
 module.exports = router;

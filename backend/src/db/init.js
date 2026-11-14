@@ -92,6 +92,47 @@ function migrate(db) {
       console.log(`Migrated: added ${table}.store_id`);
     }
   }
+  // สถานะออเดอร์แบบใหม่ + คอลัมน์การชำระเงิน (สร้างตาราง orders ใหม่ตาม schema.sql)
+  const ordersSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get().sql;
+  if (!ordersSql.includes("'no_show'")) {
+    const ddl = fs.readFileSync(SCHEMA_PATH, 'utf-8')
+      .match(/CREATE TABLE IF NOT EXISTS orders \([\s\S]*?\n\);/)[0]
+      .replace('IF NOT EXISTS orders', 'orders_new');
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+      db.exec(ddl);
+      db.exec(`
+        INSERT INTO orders_new (id, user_id, store_id, status, pickup_time, total_amount, payment_method,
+                                payment_status, queue_number, created_at, updated_at)
+          SELECT id, user_id, store_id, status, pickup_time, total_amount, payment_method,
+                 CASE status WHEN 'pending_payment' THEN 'unpaid' WHEN 'cancelled' THEN 'refunded' ELSE 'paid' END,
+                 queue_number, created_at, updated_at
+          FROM orders;
+        DROP TABLE orders;
+        ALTER TABLE orders_new RENAME TO orders;
+        CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+      `);
+    })();
+    db.pragma('foreign_keys = ON');
+    console.log('Migrated: orders table (new statuses, payment_status, cancel_reason, picked_up_at)');
+  }
+
+  // ประวัติสถานะของออเดอร์ที่ยังไม่มีประวัติ
+  const noLog = db
+    .prepare('SELECT * FROM orders o WHERE NOT EXISTS (SELECT 1 FROM order_status_logs l WHERE l.order_id = o.id)')
+    .all();
+  if (noLog.length) {
+    const addLog = db.prepare('INSERT INTO order_status_logs (order_id, status, changed_by, created_at) VALUES (?, ?, ?, ?)');
+    db.transaction(() => {
+      for (const o of noLog) {
+        addLog.run(o.id, 'paid', o.user_id, o.created_at);
+        if (o.status !== 'paid') addLog.run(o.id, o.status, null, o.updated_at);
+      }
+    })();
+    console.log(`Migrated: status logs for ${noLog.length} orders`);
+  }
+
   db.exec('CREATE INDEX IF NOT EXISTS idx_menu_store ON menu_items(store_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_store ON orders(store_id)');
 }

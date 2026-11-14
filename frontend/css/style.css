@@ -93,6 +93,7 @@ button { font-family: inherit; }
 .mt-16 { margin-top: 16px; } .mt-24 { margin-top: 24px; }
 .text-brand { color: var(--brand-600); }
 .text-green { color: var(--green); }
+.text-red { color: var(--red); }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .hidden, [hidden] { display: none !important; }
@@ -382,7 +383,7 @@ textarea.input { height: auto; min-height: 80px; padding: 12px 14px; resize: ver
 .pill--preparing { background: var(--amber-50); color: var(--amber); }
 .pill--ready { background: var(--green-50); color: var(--green); }
 .pill--completed { background: #eeebf5; color: var(--ink-2); }
-.pill--cancelled, .pill--pending_payment { background: var(--red-50); color: var(--red); }
+.pill--cancelled, .pill--rejected, .pill--no_show, .pill--pending_payment { background: var(--red-50); color: var(--red); }
 .pill--neutral { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
 .pill--brand { background: var(--brand-50); color: var(--brand-700); }
 .pill--live .dot { animation: pulse 1.6s infinite; }
@@ -769,7 +770,7 @@ textarea.input { height: auto; min-height: 80px; padding: 12px 14px; resize: ver
 }
 .status-hero--ready { background: linear-gradient(135deg, #34c46b, var(--green) 60%, #0f7a37); box-shadow: 0 14px 34px rgba(22, 163, 74, 0.3); }
 .status-hero--completed { background: linear-gradient(135deg, #5b5476, #2a2440); box-shadow: var(--shadow); }
-.status-hero--cancelled { background: linear-gradient(135deg, #f05252, #c81e1e); box-shadow: var(--shadow); }
+.status-hero--cancelled, .status-hero--rejected, .status-hero--no_show { background: linear-gradient(135deg, #f05252, #c81e1e); box-shadow: var(--shadow); }
 .status-hero::after {
   content: '';
   position: absolute;
@@ -1673,7 +1674,7 @@ body {
   background: var(--brand-50);
 }
 .cart-bar a { background: var(--grad-brand); box-shadow: 0 14px 32px rgba(101, 31, 255, 0.4); }
-.status-hero { background: radial-gradient(circle at 100% 100%, rgba(156, 200, 255, 0.45) 0 120px, transparent 121px), var(--grad-brand); }
+.status-hero:not([class*='status-hero--']) { background: radial-gradient(circle at 100% 100%, rgba(156, 200, 255, 0.45) 0 120px, transparent 121px), var(--grad-brand); }
 .info-tile { background: #fff; box-shadow: var(--shadow-sm); }
 .order-card { box-shadow: var(--shadow-sm); transition: transform 0.15s, box-shadow 0.15s; }
 .order-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }

@@ -311,9 +311,13 @@ const STATUS = {
   preparing: { label: 'กำลังเตรียมอาหาร', emoji: '👨‍🍳', title: 'กำลังเตรียมอาหาร', desc: 'ร้านกำลังทำอาหารให้คุณ ไม่ต้องรีบมาต่อคิว' },
   ready: { label: 'พร้อมรับอาหาร', emoji: '🛎️', title: 'อาหารพร้อมรับแล้ว!', desc: 'แสดงเลขคิวที่หน้าร้านเพื่อรับอาหารได้เลย' },
   completed: { label: 'รับอาหารแล้ว', emoji: '😋', title: 'รับอาหารเรียบร้อย', desc: 'ขอบคุณที่ใช้ PRE-FOOD ทานให้อร่อยนะ' },
-  cancelled: { label: 'ยกเลิกแล้ว', emoji: '🙏', title: 'ออเดอร์ถูกยกเลิก', desc: 'ร้านยกเลิกออเดอร์นี้ กรุณาติดต่อร้านค้าหากมีข้อสงสัย' },
+  cancelled: { label: 'ยกเลิกแล้ว', emoji: '🙏', title: 'ออเดอร์ถูกยกเลิก', desc: 'ยกเลิกออเดอร์แล้ว ระบบคืนเงินให้แล้ว (จำลอง)' },
+  rejected: { label: 'ร้านปฏิเสธ', emoji: '🙅', title: 'ร้านปฏิเสธออเดอร์', desc: 'ร้านรับออเดอร์นี้ไม่ได้ ระบบคืนเงินให้แล้ว (จำลอง)' },
+  no_show: { label: 'ไม่มารับ', emoji: '⌛', title: 'ไม่ได้มารับอาหาร', desc: 'เลยเวลารับแล้ว และไม่ได้มารับอาหาร' },
 };
 const ACTIVE_STATUSES = ['pending_payment', 'paid', 'preparing', 'ready'];
+// สถานะที่ออเดอร์จบแบบไม่สำเร็จ
+const FAILED_STATUSES = ['cancelled', 'rejected', 'no_show'];
 
 // ป้ายสถานะออเดอร์
 function statusPill(status, { live = false } = {}) {

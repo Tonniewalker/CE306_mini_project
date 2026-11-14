@@ -91,7 +91,8 @@
     // แสดงรายละเอียดออเดอร์
     function render(order) {
       const s = STATUS[order.status] || STATUS.paid;
-      const variant = ['ready', 'completed', 'cancelled'].includes(order.status) ? `status-hero--${order.status}` : '';
+      const variant = ['ready', 'completed', ...FAILED_STATUSES].includes(order.status) ? `status-hero--${order.status}` : '';
+      const refunded = order.payment_status === 'refunded';
       const animate = ['paid', 'preparing', 'ready'].includes(order.status) ? 'bounce' : '';
       document.getElementById('pageTitle').textContent = `ออเดอร์ #${order.id}`;
       document.title = `${s.label} · คิว ${queueLabel(order.queue_number)} · PRE-FOOD`;
@@ -104,12 +105,14 @@
           <div class="status-hero__emoji ${animate}" aria-hidden="true">${s.emoji}</div>
         </section>
 
-        ${order.status !== 'cancelled' ? `<section class="card mt-12">${progressHtml(order.status)}</section>` : ''}
+        ${order.cancel_reason ? `<section class="card mt-12"><div class="card__title">${icon('alert')}เหตุผลจากร้าน</div><p>${escapeHtml(order.cancel_reason)}</p></section>` : ''}
+
+        ${!FAILED_STATUSES.includes(order.status) ? `<section class="card mt-12">${progressHtml(order.status)}</section>` : ''}
 
         <section class="info-grid mt-12">
           <div class="info-tile"><small>เวลารับอาหาร</small><strong>${escapeHtml(formatPickup(order.pickup_time))}</strong><div>${pickupHint(order)}</div></div>
           <div class="info-tile"><small>จุดรับอาหาร</small><strong>${escapeHtml(order.store_name || '-')}</strong><div class="small muted">${escapeHtml(order.store_location || '')}</div></div>
-          <div class="info-tile"><small>การชำระเงิน</small><strong>${escapeHtml(PAYMENT_LABELS[order.payment_method] || 'ชำระเงินจำลอง')}</strong><div class="small text-green bold">ชำระแล้ว</div></div>
+          <div class="info-tile"><small>การชำระเงิน</small><strong>${escapeHtml(PAYMENT_LABELS[order.payment_method] || 'ชำระเงินจำลอง')}</strong><div class="small bold ${refunded ? 'text-red' : 'text-green'}">${refunded ? 'คืนเงินแล้ว (จำลอง)' : 'ชำระแล้ว'}</div></div>
           <div class="info-tile"><small>สั่งเมื่อ</small><strong>${escapeHtml(formatDateTime(order.created_at))}</strong></div>
         </section>
 
@@ -126,7 +129,7 @@
         </section>
 
         <div class="row mt-16" style="gap:10px">
-          ${['completed', 'cancelled'].includes(order.status)
+          ${['completed', ...FAILED_STATUSES].includes(order.status)
             ? `<button class="btn btn--lg grow" id="reorderBtn">${icon('repeat', 'icon-sm')}สั่งอีกครั้ง</button>`
             : ''}
           <a class="btn btn--lg btn--ghost grow" href="menu.html">กลับไปหน้าเมนู</a>

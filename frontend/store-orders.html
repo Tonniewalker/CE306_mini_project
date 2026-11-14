@@ -88,7 +88,7 @@
           </div>
           <div class="ticket__actions">
             <button class="btn btn--sm ${col.btn}" data-id="${o.id}" data-next="${col.next}">${col.action}</button>
-            ${o.status !== 'ready' ? `<button class="icon-btn icon-btn--danger" data-id="${o.id}" data-cancel="1" title="ยกเลิกออเดอร์" aria-label="ยกเลิกออเดอร์">${icon('x', 'icon-sm')}</button>` : ''}
+            ${o.status !== 'ready' ? `<button class="icon-btn icon-btn--danger" data-id="${o.id}" data-reject="1" title="ปฏิเสธออเดอร์" aria-label="ปฏิเสธออเดอร์">${icon('x', 'icon-sm')}</button>` : ''}
           </div>
         </article>`;
     }
@@ -97,7 +97,7 @@
     function render(orders) {
       const now = new Date();
       const today = orders.filter((o) => isSameDay(parseServerDate(o.created_at), now));
-      const valid = today.filter((o) => o.status !== 'cancelled');
+      const valid = today.filter((o) => !['cancelled', 'rejected'].includes(o.status));
       const revenue = valid.reduce((s, o) => s + o.total_amount, 0);
       const count = (st) => orders.filter((o) => o.status === st).length;
 
@@ -138,7 +138,7 @@
           </div>`;
       }).join('');
 
-      const done = today.filter((o) => ['completed', 'cancelled'].includes(o.status));
+      const done = today.filter((o) => ['completed', ...FAILED_STATUSES].includes(o.status));
       document.getElementById('historyCount').textContent = `${done.length} รายการ`;
       document.getElementById('history').innerHTML = done.length
         ? `<table class="history-table">
@@ -149,7 +149,7 @@
                 <td>${escapeHtml(o.customer_name || '-')}</td>
                 <td class="muted">${escapeHtml(o.items.map((i) => `${i.item_name} ×${i.quantity}`).join(', '))}</td>
                 <td class="bold">${formatCurrency(o.total_amount)}</td>
-                <td>${statusPill(o.status)}</td>
+                <td>${statusPill(o.status)}${o.cancel_reason ? `<div class="tiny muted mt-4">${escapeHtml(o.cancel_reason)}</div>` : ''}</td>
                 <td class="muted">${escapeHtml(formatTime(o.updated_at))}</td>
               </tr>`).join('')}</tbody>
           </table>`
@@ -168,10 +168,10 @@
     }
 
     // เปลี่ยนสถานะออเดอร์
-    async function updateStatus(id, status) {
+    async function updateStatus(id, status, reason = '') {
       busy = true;
       try {
-        await apiRequest(`/orders/${id}/status`, { method: 'PATCH', auth: true, body: { status } });
+        await apiRequest(`/orders/${id}/status`, { method: 'PATCH', auth: true, body: { status, reason } });
         toast(`อัปเดตออเดอร์ #${id}: ${STATUS[status].label}`);
       } catch (err) {
         toast(err.message, 'error');
@@ -181,21 +181,40 @@
       }
     }
 
+    // ถามเหตุผลแล้วปฏิเสธออเดอร์
+    function openReject(id) {
+      const reasons = ['วัตถุดิบหมด', 'คิวเต็ม ทำไม่ทันเวลารับ', 'ร้านปิดก่อนเวลา'];
+      const modal = openModal({
+        title: `ปฏิเสธออเดอร์ #${id}`,
+        body: `
+          <p class="small muted">ลูกค้าจะเห็นเหตุผลนี้ และได้รับเงินคืน (จำลอง) · ย้อนกลับไม่ได้</p>
+          <div class="row wrap mt-8" style="gap:8px">
+            ${reasons.map((r) => `<button type="button" class="chip" data-reason="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join('')}
+          </div>
+          <div class="field mt-12">
+            <label class="label" for="r-text">เหตุผล *</label>
+            <textarea class="input" id="r-text" rows="2" maxlength="200" placeholder="ระบุเหตุผลให้ลูกค้าทราบ"></textarea>
+          </div>
+          <div id="r-alert" hidden></div>`,
+        foot: `<button class="btn btn--ghost" data-act="cancel">กลับ</button>
+               <button class="btn btn--danger" data-act="reject">ปฏิเสธออเดอร์</button>`,
+      });
+      const text = modal.el.querySelector('#r-text');
+      modal.el.querySelectorAll('[data-reason]').forEach((b) => (b.onclick = () => { text.value = b.dataset.reason; }));
+      modal.el.querySelector('[data-act="cancel"]').onclick = () => modal.close();
+      modal.el.querySelector('[data-act="reject"]').onclick = () => {
+        const reason = text.value.trim();
+        if (!reason) return showAlert(modal.el.querySelector('#r-alert'), 'กรุณาระบุเหตุผล');
+        modal.close();
+        updateStatus(id, 'rejected', reason);
+      };
+    }
+
     document.getElementById('kanban').addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-id]');
       if (!btn) return;
       const id = Number(btn.dataset.id);
-      if (btn.dataset.cancel) {
-        const ok = await confirmDialog({
-          title: `ยกเลิกออเดอร์ #${id}?`,
-          message: 'ลูกค้าจะเห็นว่าออเดอร์ถูกยกเลิก การยกเลิกไม่สามารถย้อนกลับได้',
-          confirmText: 'ยกเลิกออเดอร์',
-          cancelText: 'ไม่ใช่ตอนนี้',
-          danger: true,
-        });
-        if (ok) updateStatus(id, 'cancelled');
-        return;
-      }
+      if (btn.dataset.reject) return openReject(id);
       btn.disabled = true;
       updateStatus(id, btn.dataset.next);
     });
