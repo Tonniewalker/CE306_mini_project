@@ -112,7 +112,7 @@ function requireAuth(role) {
 }
 
 /* ---------------- ร้านค้า ---------------- */
-// โหลดข้อมูลร้าน (ไม่ระบุ id ใช้ร้านล่าสุด หรือร้านแรก)
+// โหลดข้อมูลร้าน
 async function loadStore(id) {
   id = id || localStorage.getItem(STORE_KEY);
   let store = null;

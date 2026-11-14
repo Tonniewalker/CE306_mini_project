@@ -63,7 +63,7 @@ function migrate(db) {
         DROP TABLE users;
         ALTER TABLE users_new RENAME TO users;
       `);
-      // บัญชีร้านค้ารุ่นแรก (admin@) เปลี่ยนเป็นบัญชีร้านค้าปัจจุบัน
+      // เปลี่ยนบัญชีร้านค้าเดิม (admin@) เป็นบัญชีร้านค้าปัจจุบัน
       if (!hadStore) {
         db.prepare('UPDATE users SET email = ?, name = ?, password_hash = ? WHERE email = ?').run(
           STORE_EMAIL, STORE_NAME, bcrypt.hashSync(STORE_PASSWORD, 10), 'admin@prefood.dpu.ac.th'
@@ -92,7 +92,7 @@ function migrate(db) {
       console.log(`Migrated: added ${table}.store_id`);
     }
   }
-  // สถานะออเดอร์แบบใหม่ + คอลัมน์การชำระเงิน (สร้างตาราง orders ใหม่ตาม schema.sql)
+  // อัปเดตตาราง orders (สถานะใหม่ + การชำระเงิน)
   const ordersSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get().sql;
   if (!ordersSql.includes("'no_show'")) {
     const ddl = fs.readFileSync(SCHEMA_PATH, 'utf-8')

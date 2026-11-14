@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { requireStore } = require('../middleware/store');
+const { removeUpload } = require('./uploads');
 const { DEFAULT_CATEGORY } = require('../db/init');
 
 const router = express.Router();
@@ -91,6 +92,8 @@ router.put('/:id', (req, res) => {
          updated_at = datetime('now')
      WHERE id = ?`
   ).run(name, description, Number(price), imageUrl, isAvailable ? 1 : 0, category, id);
+  // เปลี่ยนรูปแล้ว ลบไฟล์รูปเดิม
+  if (existing.image_url !== imageUrl) removeUpload(existing.image_url);
 
   const updated = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
   res.json(updated);
@@ -111,6 +114,7 @@ router.delete('/:id', (req, res) => {
     });
   }
   db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
+  removeUpload(existing.image_url);
   res.json({ success: true });
 });
 

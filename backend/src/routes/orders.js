@@ -226,7 +226,7 @@ router.get('/', authenticate, requireRole('store'), requireStore, (req, res) => 
   res.json(orders.map(attachItems));
 });
 
-// PATCH /api/orders/:id/status - เปลี่ยนสถานะออเดอร์ (ร้านค้า) ส่ง { status, reason }
+// PATCH /api/orders/:id/status - เปลี่ยนสถานะออเดอร์ (ร้านค้า)
 router.patch('/:id/status', authenticate, requireRole('store'), requireStore, (req, res) => {
   const { status } = req.body;
   const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
@@ -251,7 +251,7 @@ router.patch('/:id/status', authenticate, requireRole('store'), requireStore, (r
 
   const rejected = status === 'rejected';
   const changed = db.transaction(() => {
-    // เปลี่ยนเฉพาะถ้าสถานะยังเหมือนตอนที่อ่าน (กันกดซ้ำจากหลายหน้าจอ)
+    // กันกดเปลี่ยนสถานะซ้ำ
     const result = db
       .prepare(
         `UPDATE orders

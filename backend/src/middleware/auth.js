@@ -20,7 +20,7 @@ function authenticate(req, res, next) {
     return res.status(401).json({ error: 'token ไม่ถูกต้องหรือหมดอายุ' });
   }
 
-  // ใช้ข้อมูลล่าสุดจากฐานข้อมูล
+  // ดึงข้อมูลบัญชีล่าสุดจากฐานข้อมูล
   const user = db.prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?').get(payload.id);
   if (!user) {
     return res.status(401).json({ error: 'ไม่พบบัญชีนี้ กรุณาเข้าสู่ระบบใหม่' });

@@ -8,7 +8,7 @@ const router = express.Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// แปลงค่าเป็นข้อความที่ตัดช่องว่างแล้ว (ไม่ใช่ข้อความคืน '')
+// ตัดช่องว่างหน้า-หลังข้อความ
 function str(value) {
   return typeof value === 'string' ? value.trim() : '';
 }

@@ -17,6 +17,7 @@ const authRoutes = require('./routes/auth');
 const menuRoutes = require('./routes/menu');
 const storeRoutes = require('./routes/stores');
 const orderRoutes = require('./routes/orders');
+const uploadRoutes = require('./routes/uploads');
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'pre-food-api' });
@@ -42,6 +44,9 @@ app.get('/api/health', (req, res) => {
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'ไม่พบ API นี้' });
 });
+
+// เสิร์ฟรูปที่อัปโหลด
+app.use('/uploads', express.static(uploadRoutes.UPLOAD_DIR, { fallthrough: false, maxAge: '7d' }));
 
 // เสิร์ฟไฟล์หน้าเว็บ
 const frontendDir = path.join(__dirname, '..', '..', 'frontend');
@@ -55,6 +60,15 @@ app.use((req, res, next) => {
 
 // จัดการ error
 app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: `ไฟล์ใหญ่เกิน ${uploadRoutes.MAX_SIZE_MB} MB` });
+  }
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'ข้อมูลที่ส่งมาไม่ถูกต้อง' });
+  }
+  if (err.status === 404 || err.status === 403) {
+    return res.status(404).json({ error: 'ไม่พบไฟล์' });
+  }
   console.error(err);
   res.status(500).json({ error: 'เกิดข้อผิดพลาดในระบบ' });
 });
