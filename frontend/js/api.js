@@ -74,13 +74,13 @@ async function apiRequest(path, { method = 'GET', body, file, auth = false } = {
   // token หมดอายุ ให้ล็อกอินใหม่
   if (res.status === 401 && auth) {
     clearAuth();
-    window.location.href = 'menu.html?auth=login&expired=1';
+    window.location.href = 'stores.html?auth=login&expired=1';
     throw new Error((data && data.error) || 'กรุณาเข้าสู่ระบบใหม่');
   }
   // บัญชีถูกระงับ ให้ออกจากระบบ
   if (res.status === 403 && auth && data && data.code === 'suspended') {
     clearAuth();
-    window.location.href = 'menu.html?auth=login&suspended=1';
+    window.location.href = 'stores.html?auth=login&suspended=1';
     throw new Error(data.error);
   }
   if (!res.ok) {
@@ -93,7 +93,7 @@ async function apiRequest(path, { method = 'GET', body, file, auth = false } = {
 function homePage(role) {
   if (role === 'store') return 'store-orders.html';
   if (role === 'admin') return 'admin-dashboard.html';
-  return 'menu.html';
+  return 'stores.html';
 }
 
 // ตรวจว่าล็อกอินและมี role ที่ต้องการ ถ้าไม่ใช่ให้เปลี่ยนหน้า
@@ -101,7 +101,7 @@ function requireAuth(role) {
   const user = getUser();
   if (!user || !getToken()) {
     const next = encodeURIComponent(location.pathname.split('/').pop() + location.search);
-    window.location.href = `menu.html?auth=login&next=${next}`;
+    window.location.href = `stores.html?auth=login&next=${next}`;
     return null;
   }
   if (role && user.role !== role) {
@@ -131,6 +131,24 @@ async function loadStore(id) {
   localStorage.setItem(STORE_KEY, store.id);
   STORE = { ...store, hours: `${store.open_time} – ${store.close_time}` };
   return STORE;
+}
+
+// สถานะการรับออเดอร์ของร้านตอนนี้ { label, pill, canOrder }
+function storeOpenState(store) {
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (!store.is_accepting) return { label: 'ปิดรับออเดอร์ชั่วคราว', pill: 'cancelled', canOrder: false };
+  if (nowMin + ORDER_RULES.minLeadMinutes > toMin(store.close_time)) {
+    return { label: 'หมดเวลาสั่งวันนี้', pill: 'completed', canOrder: false };
+  }
+  if (nowMin < toMin(store.open_time)) return { label: 'ร้านยังไม่เปิด', pill: 'preparing', canOrder: false };
+  return { label: 'เปิดรับออเดอร์', pill: 'ready', canOrder: true };
+}
+// ป้ายสถานะร้าน
+function storeStatePill(store) {
+  const s = storeOpenState(store);
+  return `<span class="pill pill--${s.pill}"><span class="dot"></span>${s.label}</span>`;
 }
 
 /* ---------------- รูปภาพ ---------------- */
@@ -214,7 +232,7 @@ function setCartQty(item, quantity) {
     delete cart[item.id];
   } else {
     cart[item.id] = {
-      store_id: item.store_id,
+      store_id: item.store_id ?? cart[item.id]?.store_id,
       menu_item_id: item.id,
       name: item.name,
       price: item.price,
@@ -229,6 +247,19 @@ function setCartQty(item, quantity) {
 function cartStoreId() {
   const first = Object.values(getCart())[0];
   return first ? first.store_id : null;
+}
+// ตะกร้ามีเมนูร้านอื่น ถามก่อนล้างตะกร้า (คืน true ถ้าใส่เมนูร้านนี้ได้)
+async function confirmCartStore(storeId) {
+  const current = cartStoreId();
+  if (!current || current === storeId) return true;
+  const ok = await confirmDialog({
+    title: 'เริ่มตะกร้าใหม่?',
+    message: 'ตะกร้ามีเมนูจากร้านอื่นอยู่ สั่งได้ครั้งละ 1 ร้าน ต้องการล้างตะกร้าแล้วเริ่มสั่งร้านนี้ไหม',
+    confirmText: 'ล้างตะกร้า',
+    cancelText: 'ไม่ใช่ตอนนี้',
+  });
+  if (ok) clearCart();
+  return ok;
 }
 // จำนวนของเมนูนี้ในตะกร้า
 function cartQty(id) {
@@ -245,9 +276,8 @@ function cartTotal() {
 
 // สั่งซ้ำ: ใส่เมนูจากออเดอร์เก่าลงตะกร้า
 async function reorder(order) {
+  if (!(await confirmCartStore(order.store_id))) return null;
   const menu = await apiRequest(`/stores/${order.store_id}/menu`);
-  // ตะกร้ามีของร้านอื่นอยู่ ให้เริ่มตะกร้าใหม่
-  if (cartStoreId() && cartStoreId() !== order.store_id) clearCart();
   const byId = new Map(menu.map((m) => [m.id, m]));
   let added = 0;
   let missing = 0;

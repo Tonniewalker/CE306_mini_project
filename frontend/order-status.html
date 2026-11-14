@@ -111,7 +111,7 @@
 
         <section class="info-grid mt-12">
           <div class="info-tile"><small>เวลารับอาหาร</small><strong>${escapeHtml(formatPickup(order.pickup_time))}</strong><div>${pickupHint(order)}</div></div>
-          <div class="info-tile"><small>จุดรับอาหาร</small><strong>${escapeHtml(order.store_name || '-')}</strong><div class="small muted">${escapeHtml(order.store_location || '')}</div></div>
+          <div class="info-tile"><small>ร้าน</small><strong>${escapeHtml(order.store_name || '-')}</strong></div>
           <div class="info-tile"><small>การชำระเงิน</small><strong>${escapeHtml(PAYMENT_LABELS[order.payment_method] || 'ชำระเงินจำลอง')}</strong><div class="small bold ${refunded ? 'text-red' : 'text-green'}">${refunded ? 'คืนเงินแล้ว (จำลอง)' : 'ชำระแล้ว'}</div></div>
           <div class="info-tile"><small>สั่งเมื่อ</small><strong>${escapeHtml(formatDateTime(order.created_at))}</strong></div>
         </section>
@@ -132,13 +132,15 @@
           ${['completed', ...FAILED_STATUSES].includes(order.status)
             ? `<button class="btn btn--lg grow" id="reorderBtn">${icon('repeat', 'icon-sm')}สั่งอีกครั้ง</button>`
             : ''}
-          <a class="btn btn--lg btn--ghost grow" href="menu.html">กลับไปหน้าเมนู</a>
+          <a class="btn btn--lg btn--ghost grow" href="stores.html">กลับหน้าแรก</a>
         </div>`;
 
       const reorderBtn = document.getElementById('reorderBtn');
       if (reorderBtn) reorderBtn.onclick = async () => {
         try {
-          const { added, missing } = await reorder(order);
+          const result = await reorder(order);
+          if (!result) return;
+          const { added, missing } = result;
           if (!added) return toast('เมนูในออเดอร์นี้ปิดขายหมดแล้ว', 'error');
           if (missing) toast(`มี ${missing} เมนูปิดขายแล้ว จึงไม่ได้ใส่ตะกร้า`, 'error');
           location.href = 'cart.html';

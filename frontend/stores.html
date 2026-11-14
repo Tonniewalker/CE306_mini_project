@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>PRE-FOOD · สั่งอาหารล่วงหน้า</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside id="rail"></aside>
+
+    <div class="shell-main">
+      <header id="m-topbar"></header>
+
+      <main class="main-wrap">
+        <div class="greet">
+          <h1 id="greetTitle">สั่งล่วงหน้าเลย ไม่ต้องต่อคิว</h1>
+          <p>เลือกร้าน สั่งอาหาร แล้วมารับตามเวลาที่เลือก</p>
+        </div>
+
+        <div class="search-xl">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input class="input" type="search" id="search" placeholder="ค้นหาร้านค้า" autocomplete="off" aria-label="ค้นหาร้าน">
+        </div>
+
+        <div class="list-head">
+          <h2>ร้านทั้งหมด</h2>
+          <span class="small muted" id="storeCount"></span>
+        </div>
+
+        <section class="store-grid" id="grid">
+          <div class="skeleton" style="height:240px"></div>
+          <div class="skeleton" style="height:240px"></div>
+          <div class="skeleton" style="height:240px"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าแรก: เลือกร้านอาหาร
+    const user = getUser();
+    renderCustomerShell('home');
+    handleAuthParams();
+
+    let stores = [];
+
+    if (user && user.role === 'customer') {
+      document.getElementById('greetTitle').textContent = `สวัสดี, ${user.name.split(' ')[0]} 👋`;
+    }
+
+    // การ์ดร้าน
+    function storeCard(s) {
+      const state = storeOpenState(s);
+      const cover = s.image_url
+        ? `<img src="${escapeHtml(s.image_url)}" alt="" loading="lazy" onerror="this.replaceWith(document.createTextNode('🍽️'))">`
+        : '🍽️';
+      return `
+        <a class="store-card ${state.canOrder ? '' : 'off'}" href="menu.html?store=${s.id}">
+          <div class="store-card__cover">${cover}</div>
+          <div class="store-card__body">
+            <div class="between" style="align-items:flex-start;gap:8px">
+              <h3>${escapeHtml(s.name)}</h3>
+              ${storeStatePill(s)}
+            </div>
+            ${s.description ? `<p class="small muted clamp-2">${escapeHtml(s.description)}</p>` : ''}
+            <div class="store-card__meta small muted">
+              <span>${icon('clock', 'icon-sm')}${escapeHtml(s.open_time)} – ${escapeHtml(s.close_time)} น.</span>
+              <span>${icon('receipt', 'icon-sm')}คิวรอ ${s.queue.waiting} ออเดอร์</span>
+            </div>
+          </div>
+        </a>`;
+    }
+
+    // แสดงรายการร้าน
+    function render() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const list = stores
+        .filter((s) => !q || [s.name, s.description].some((t) => (t || '').toLowerCase().includes(q)))
+        .sort((a, b) => storeOpenState(b).canOrder - storeOpenState(a).canOrder);
+      document.getElementById('storeCount').textContent = `${stores.length} ร้าน`;
+      document.getElementById('grid').innerHTML = list.length
+        ? list.map(storeCard).join('')
+        : `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">🍽️</div><h3>${stores.length ? 'ไม่พบร้านที่ค้นหา' : 'ยังไม่มีร้านเปิดให้บริการ'}</h3></div>`;
+    }
+
+    // โหลดรายการร้าน
+    async function load() {
+      try {
+        stores = await apiRequest('/stores');
+        render();
+      } catch (err) {
+        document.getElementById('grid').innerHTML =
+          `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">😵</div><h3>โหลดรายการร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p><button class="btn" onclick="load()">ลองใหม่</button></div>`;
+      }
+    }
+
+    document.getElementById('search').addEventListener('input', render);
+    load();
+    setInterval(load, 30000);
+  </script>
+</body>
+</html>

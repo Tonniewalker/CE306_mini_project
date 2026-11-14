@@ -1,7 +1,7 @@
 // โครงหน้าที่ใช้ร่วมกัน: แถบนำทางผู้ใช้, ป๊อปอัปล็อกอิน, sidebar ร้านค้าและ admin
 
 // โลโก้ PRE-FOOD
-function brandHtml(href = 'menu.html') {
+function brandHtml(href = 'stores.html') {
   return `<a class="brand" href="${href}"><span class="brand__mark">🍱</span><span class="brand__text">PRE<span>-</span>FOOD</span></a>`;
 }
 
@@ -29,9 +29,9 @@ function renderCustomerShell(active = '') {
       `<a class="rail__item ${active === key ? 'active' : ''}" href="${href}" title="${label}">${icon(ic)}<span>${label}</span>${extra}</a>`;
     rail.className = 'rail';
     rail.innerHTML = `
-      <a class="rail__logo" href="menu.html" title="PRE-FOOD">🍱</a>
+      <a class="rail__logo" href="stores.html" title="PRE-FOOD">🍱</a>
       <nav class="rail__nav" aria-label="เมนูหลัก">
-        ${item('menu', 'menu.html', 'home', 'หน้าแรก')}
+        ${item('home', 'stores.html', 'home', 'หน้าแรก')}
         ${item('orders', 'my-orders.html', 'receipt', 'ออเดอร์')}
         ${item('cart', 'cart.html', 'bag', 'ตะกร้า', cartBadge(count))}
       </nav>
@@ -52,7 +52,7 @@ function renderCustomerShell(active = '') {
     top.innerHTML = `
       ${brandHtml()}
       <nav class="row" style="margin-left:auto;gap:2px" aria-label="เมนูหลัก">
-        ${link('menu', 'menu.html', 'home', 'หน้าแรก')}
+        ${link('home', 'stores.html', 'home', 'หน้าแรก')}
         ${link('orders', 'my-orders.html', 'receipt', 'ออเดอร์')}
         ${link('cart', 'cart.html', 'bag', 'ตะกร้า', cartBadge(count))}
         ${isCustomer
@@ -198,6 +198,19 @@ function openAuthModal(mode = 'login', options = {}) {
   return modal;
 }
 
+// เปิดป๊อปอัปล็อกอินจากลิงก์ ?auth=login หรือ ?auth=register
+function handleAuthParams() {
+  const params = new URLSearchParams(location.search);
+  if (!params.get('auth') || (getUser() && getToken())) return;
+  const next = params.get('next');
+  openAuthModal(params.get('auth') === 'register' ? 'register' : 'login', {
+    next,
+    message: params.get('suspended') ? 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'
+      : params.get('expired') ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
+      : next ? 'กรุณาเข้าสู่ระบบก่อนใช้งานส่วนนี้' : '',
+  });
+}
+
 // แสดง toast ที่ค้างไว้จากหน้าก่อน
 document.addEventListener('DOMContentLoaded', () => {
   const msg = sessionStorage.getItem('prefood_toast');
@@ -287,5 +300,5 @@ async function handleLogout() {
   });
   if (!ok) return;
   clearAuth();
-  window.location.href = 'menu.html';
+  window.location.href = 'stores.html';
 }

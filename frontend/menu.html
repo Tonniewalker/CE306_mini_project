@@ -19,14 +19,16 @@
       <header id="m-topbar"></header>
 
       <main class="main-wrap">
+        <a class="back-link" href="stores.html" id="backLink">ร้านทั้งหมด</a>
         <div class="greet">
           <h1 id="greetTitle">สั่งล่วงหน้าเลย ไม่ต้องต่อคิว</h1>
           <!-- <p>สั่งล่วงหน้า แล้วมารับตามเวลา ไม่ต้องต่อคิว</p> -->
+          <p id="greetSub"></p>
         </div>
 
         <div class="search-xl">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <input class="input" type="search" id="search" placeholder="อยากทานอะไรดี? ค้นหาเมนู เช่น กะเพรา, ชาไทย" autocomplete="off" aria-label="ค้นหาเมนู">
+          <input class="input" type="search" id="search" placeholder="ค้นหาเมนู" autocomplete="off" aria-label="ค้นหาเมนู">
         </div>
 
         <!-- ออเดอร์ที่กำลังทำ (จอเล็ก) -->
@@ -77,31 +79,28 @@
     const params = new URLSearchParams(location.search);
     const user = getUser();
     let activeTab = params.get('tab') === 'fav' ? 'fav' : 'all';
-    renderCustomerShell('menu');
+    renderCustomerShell('home');
+    document.getElementById('backLink').insertAdjacentHTML('afterbegin', icon('back', 'icon-sm'));
 
     let menuItems = [];
     let queue = { waiting: 0, ready: 0 };
     let activeOrder = null;
 
-    if (user && user.role === 'customer') {
-      document.getElementById('greetTitle').textContent = `สวัสดี, ${user.name.split(' ')[0]} 👋`;
-    }
+    handleAuthParams();
 
-    /* ---------- เปิดป๊อปอัปล็อกอินจาก ?auth= ---------- */
-    if (params.get('auth') && !(user && getToken())) {
-      const next = params.get('next');
-      openAuthModal(params.get('auth') === 'register' ? 'register' : 'login', {
-        next,
-        message: params.get('suspended') ? 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'
-          : params.get('expired') ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
-          : next ? 'กรุณาเข้าสู่ระบบก่อนใช้งานส่วนนี้' : '',
-      });
+    // หัวหน้าเป็นข้อมูลร้าน
+    function renderStoreHead() {
+      document.getElementById('greetTitle').textContent = STORE.name;
+      document.getElementById('greetSub').innerHTML =
+        `เปิด ${escapeHtml(STORE.hours)} น. ${storeStatePill(STORE)}`;
+      document.title = `${STORE.name} · PRE-FOOD`;
     }
 
     // ไปหน้าชำระเงิน (ยังไม่ล็อกอินให้ล็อกอินก่อน)
     function goCheckout(e) {
       if (e) e.preventDefault();
       if (!cartCount()) return;
+      if (STORE && !storeOpenState(STORE).canOrder) return toast(storeOpenState(STORE).label, 'error');
       if (!getUser() || !getToken()) {
         openAuthModal('login', { next: 'cart.html', message: 'เข้าสู่ระบบก่อนชำระเงิน ตะกร้าของคุณยังอยู่ครบ' });
         return;
@@ -272,7 +271,7 @@
       tile.querySelector(`[data-control="${id}"]`).innerHTML = controlHtml(item);
     }
 
-    document.getElementById('grid').addEventListener('click', (e) => {
+    document.getElementById('grid').addEventListener('click', async (e) => {
       const favBtn = e.target.closest('[data-fav]');
       if (favBtn) {
         const on = toggleFav(favBtn.dataset.fav);
@@ -292,6 +291,8 @@
       const item = menuItems.find((i) => i.id === id);
       if (!item) return;
       const current = cartQty(id);
+      if (btn.dataset.action === 'inc' && !storeOpenState(STORE).canOrder) return toast(storeOpenState(STORE).label, 'error');
+      if (current === 0 && !(await confirmCartStore(item.store_id))) return;
       setCartQty(item, btn.dataset.action === 'inc' ? current + 1 : current - 1);
       if (current === 0) toast(`เพิ่ม ${item.name} ลงตะกร้าแล้ว`);
       refreshTile(id);
@@ -317,6 +318,7 @@
       const items = Object.values(getCart());
       const total = cartTotal();
       const eta = Math.max(5, queue.waiting * ORDER_RULES.minutesPerOrder);
+      const state = storeOpenState(STORE);
       document.getElementById('orderPanel').innerHTML = `
         <div class="order-panel__head">
           <div class="between">
@@ -325,7 +327,7 @@
           </div>
           <div class="pickup-box">
             <small>รับที่ร้าน</small>
-            <div class="place">${escapeHtml(STORE.location)}</div>
+            <div class="place">${escapeHtml(STORE.name)}</div>
             <div class="meta">
               <span>${icon('clock')}~${eta} นาที</span>
               <span>${icon('receipt')}คิว ${queue.waiting} ออเดอร์</span>
@@ -363,8 +365,8 @@
         <div class="order-panel__foot">
           <div class="sum-row"><span>ค่าอาหาร (${cartCount()} รายการ)</span><span>${formatCurrency(total)}</span></div>
           <div class="sum-total"><span>รวมทั้งหมด</span><strong>${formatCurrency(total)}</strong></div>
-          <button class="btn btn--lg btn--block btn--shadow mt-12" data-checkout ${items.length ? '' : 'disabled'}>
-            ${items.length ? 'เลือกเวลารับ & ชำระเงิน' : 'เลือกเมนูก่อนนะ'}
+          <button class="btn btn--lg btn--block btn--shadow mt-12" data-checkout ${items.length && state.canOrder ? '' : 'disabled'}>
+            ${!state.canOrder ? state.label : items.length ? 'เลือกเวลารับ & ชำระเงิน' : 'เลือกเมนูก่อนนะ'}
           </button>
         </div>`;
     }
@@ -439,6 +441,7 @@
     updateCartBar();
     loadStore(params.get('store'))
       .then(() => {
+        renderStoreHead();
         renderPanel();
         loadMenu();
         loadQueue();

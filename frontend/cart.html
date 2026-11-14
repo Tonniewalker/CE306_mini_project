@@ -61,7 +61,7 @@
     // ปรับเวลารับให้อยู่ในช่วงที่เลือกได้
     function syncPickup() {
       const e = earliestMin();
-      if (e > CLOSE) { pickupMin = null; return; } // ปิดรับออเดอร์แล้ว
+      if (e > CLOSE || !storeOpenState(STORE).canOrder) { pickupMin = null; return; } // ปิดรับออเดอร์แล้ว
       if (pickupMin === null) pickupMin = Math.ceil(e / 5) * 5; // ค่าเริ่มต้น: เวลาเร็วสุด
       pickupMin = Math.min(CLOSE, Math.max(e, pickupMin));
     }
@@ -112,7 +112,7 @@
           <div class="pickup-closed">
             <div class="pickup-closed__icon">🌙</div>
             <div>
-              <div class="bold">ตอนนี้ร้านปิดรับออเดอร์แล้ว</div>
+              <div class="bold">${storeOpenState(STORE).canOrder ? 'ตอนนี้ร้านปิดรับออเดอร์แล้ว' : storeOpenState(STORE).label}</div>
               <div class="small muted">รับอาหารได้ทุกวัน ${STORE.open_time} – ${STORE.close_time} น. (สั่งได้ถึง ${hhmm(CLOSE - LEAD)} น.)</div>
             </div>
           </div>`;
@@ -163,7 +163,7 @@
             <div class="empty__emoji">🛒</div>
             <h3>ตะกร้ายังว่างอยู่</h3>
             <p>เลือกเมนูที่อยากทาน แล้วกลับมาชำระเงินที่นี่</p>
-            <a class="btn" href="menu.html">${icon('utensils', 'icon-sm')}ไปเลือกเมนู</a>
+            <a class="btn" href="stores.html">${icon('utensils', 'icon-sm')}ไปเลือกร้าน</a>
           </div>`;
         return;
       }
@@ -180,7 +180,6 @@
                 <div class="store-card__logo" style="width:48px;height:48px;font-size:24px">🍳</div>
                 <div class="grow">
                   <div class="bold">${escapeHtml(STORE.name)}</div>
-                  <div class="small muted row" style="gap:4px">${icon('pin', 'icon-sm')}${escapeHtml(STORE.location)}</div>
                 </div>
                 <span class="pill pill--brand">รับเองที่ร้าน</span>
               </div>
