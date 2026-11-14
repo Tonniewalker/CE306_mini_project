@@ -1,10 +1,12 @@
-// API เมนูอาหาร
+// API จัดการเมนู (ร้านค้า เฉพาะเมนูของร้านตัวเอง)
 const express = require('express');
 const db = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { requireStore } = require('../middleware/store');
 const { DEFAULT_CATEGORY } = require('../db/init');
 
 const router = express.Router();
+router.use(authenticate, requireRole('store'), requireStore);
 
 // ตัดช่องว่างหน้า-หลัง ถ้าว่างคืน null
 function cleanText(value) {
@@ -23,20 +25,19 @@ function validatePrice(price) {
   return null;
 }
 
-// GET /api/menu - เมนูที่เปิดขาย
-router.get('/', (req, res) => {
-  const items = db.prepare('SELECT * FROM menu_items WHERE is_available = 1 ORDER BY id').all();
+// หาเมนูของร้านตัวเอง
+function findOwn(req) {
+  return db.prepare('SELECT * FROM menu_items WHERE id = ? AND store_id = ?').get(req.params.id, req.store.id);
+}
+
+// GET /api/menu/all - เมนูทั้งหมดของร้าน
+router.get('/all', (req, res) => {
+  const items = db.prepare('SELECT * FROM menu_items WHERE store_id = ? ORDER BY id').all(req.store.id);
   res.json(items);
 });
 
-// GET /api/menu/all - เมนูทั้งหมด (ร้านค้า)
-router.get('/all', authenticate, requireRole('store'), (req, res) => {
-  const items = db.prepare('SELECT * FROM menu_items ORDER BY id').all();
-  res.json(items);
-});
-
-// POST /api/menu - เพิ่มเมนู (ร้านค้า)
-router.post('/', authenticate, requireRole('store'), (req, res) => {
+// POST /api/menu - เพิ่มเมนู
+router.post('/', (req, res) => {
   const { name, description, price, image_url, is_available, category } = req.body;
 
   if (!cleanText(name)) {
@@ -47,10 +48,11 @@ router.post('/', authenticate, requireRole('store'), (req, res) => {
 
   const result = db
     .prepare(
-      `INSERT INTO menu_items (name, description, price, image_url, is_available, category)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO menu_items (store_id, name, description, price, image_url, is_available, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
+      req.store.id,
       cleanText(name),
       cleanText(description),
       Number(price),
@@ -63,10 +65,10 @@ router.post('/', authenticate, requireRole('store'), (req, res) => {
   res.status(201).json(item);
 });
 
-// PUT /api/menu/:id - แก้ไขเมนู (ร้านค้า)
-router.put('/:id', authenticate, requireRole('store'), (req, res) => {
+// PUT /api/menu/:id - แก้ไขเมนู
+router.put('/:id', (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
+  const existing = findOwn(req);
   if (!existing) {
     return res.status(404).json({ error: 'ไม่พบเมนูนี้' });
   }
@@ -94,10 +96,10 @@ router.put('/:id', authenticate, requireRole('store'), (req, res) => {
   res.json(updated);
 });
 
-// DELETE /api/menu/:id - ลบเมนู (ร้านค้า)
-router.delete('/:id', authenticate, requireRole('store'), (req, res) => {
+// DELETE /api/menu/:id - ลบเมนู
+router.delete('/:id', (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
+  const existing = findOwn(req);
   if (!existing) {
     return res.status(404).json({ error: 'ไม่พบเมนูนี้' });
   }

@@ -114,7 +114,7 @@
     let slideTimer = null;
     // ข้อมูลสไลด์แบนเนอร์
     function promoSlides() {
-      const eta = Math.max(5, queue.waiting * STORE.minutesPerOrder);
+      const eta = Math.max(5, queue.waiting * ORDER_RULES.minutesPerOrder);
       return [
         { eyebrow: '⏱️ PRE-FOOD', title: 'สั่งก่อน<br>ไม่ต้องต่อคิว', text: 'เลือกเวลารับเองได้ ไม่ต้องยืนรอหน้าร้าน', cta: 'เริ่มสั่งเลย', art: ['🍛', '🧋', '🥢'] },
         // { eyebrow: '🔴 คิวตอนนี้', title: `รอทำ ${queue.waiting} ออเดอร์`, text: `รอประมาณ ~${eta} นาที · พร้อมรับ ${queue.ready} ออเดอร์`, cta: 'ดูเมนู', art: ['🍜', '🛎️', '⏱️'] },
@@ -313,9 +313,10 @@
 
     // แสดงแผงออเดอร์ของฉัน
     function renderPanel() {
+      if (!STORE) return;
       const items = Object.values(getCart());
       const total = cartTotal();
-      const eta = Math.max(5, queue.waiting * STORE.minutesPerOrder);
+      const eta = Math.max(5, queue.waiting * ORDER_RULES.minutesPerOrder);
       document.getElementById('orderPanel').innerHTML = `
         <div class="order-panel__head">
           <div class="between">
@@ -400,7 +401,7 @@
     // โหลดเมนู
     async function loadMenu() {
       try {
-        menuItems = await apiRequest('/menu');
+        menuItems = await apiRequest(`/stores/${STORE.id}/menu`);
         renderTabs();
         renderGrid();
       } catch (err) {
@@ -411,7 +412,7 @@
     // โหลดจำนวนคิว
     async function loadQueue() {
       try {
-        queue = await apiRequest('/orders/queue/status');
+        queue = (await apiRequest(`/stores/${STORE.id}`)).queue;
         renderPromo();
         renderPanel();
       } catch (e) { /* ไม่ critical */ }
@@ -435,12 +436,19 @@
 
     renderPromo();
     startSlides();
-    renderPanel();
     updateCartBar();
-    loadMenu();
-    loadQueue();
-    loadActiveOrder();
-    setInterval(loadQueue, 15000);
+    loadStore(params.get('store'))
+      .then(() => {
+        renderPanel();
+        loadMenu();
+        loadQueue();
+        loadActiveOrder();
+        setInterval(loadQueue, 15000);
+      })
+      .catch((err) => {
+        document.getElementById('grid').innerHTML =
+          `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">🏪</div><h3>โหลดข้อมูลร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p></div>`;
+      });
   </script>
 </body>
 </html>

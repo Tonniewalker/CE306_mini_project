@@ -44,9 +44,9 @@
     const toMinutes = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
     const pad2 = (n) => String(n).padStart(2, '0');
     const hhmm = (min) => `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
-    const OPEN = toMinutes(STORE.openTime);
-    const CLOSE = toMinutes(STORE.closeTime);
-    const LEAD = STORE.minLeadMinutes;
+    let OPEN = 0;
+    let CLOSE = 0;
+    const LEAD = ORDER_RULES.minLeadMinutes;
 
     let pickupMin = null; // เวลารับที่เลือก (นาที), null = ปิดรับออเดอร์
 
@@ -113,7 +113,7 @@
             <div class="pickup-closed__icon">🌙</div>
             <div>
               <div class="bold">ตอนนี้ร้านปิดรับออเดอร์แล้ว</div>
-              <div class="small muted">รับอาหารได้ทุกวัน ${STORE.openTime} – ${STORE.closeTime} น. (สั่งได้ถึง ${hhmm(CLOSE - LEAD)} น.)</div>
+              <div class="small muted">รับอาหารได้ทุกวัน ${STORE.open_time} – ${STORE.close_time} น. (สั่งได้ถึง ${hhmm(CLOSE - LEAD)} น.)</div>
             </div>
           </div>`;
       }
@@ -132,7 +132,7 @@
           </div>
         </div>
         <input type="range" class="pickup__range" id="pkRange" min="${e}" max="${CLOSE}" step="1" value="${pickupMin}" aria-label="เลื่อนเพื่อเลือกเวลารับ">
-        <div class="pickup__ticks"><span id="pkFirst">เร็วสุด ${hhmm(e)}</span><span>${STORE.closeTime}</span></div>`;
+        <div class="pickup__ticks"><span id="pkFirst">เร็วสุด ${hhmm(e)}</span><span>${STORE.close_time}</span></div>`;
     }
 
     // อัปเดตส่วนเลือกเวลารับ
@@ -362,7 +362,7 @@
     // อัปเดตราคาและเอาเมนูที่ปิดขายออกจากตะกร้า
     async function syncCartWithMenu() {
       try {
-        const menu = await apiRequest('/menu');
+        const menu = await apiRequest(`/stores/${STORE.id}/menu`);
         const byId = new Map(menu.map((m) => [m.id, m]));
         const cart = getCart();
         let removed = 0;
@@ -378,7 +378,16 @@
     }
 
     // เริ่มต้นหน้า
-    function init() {
+    async function init() {
+      try {
+        await loadStore(cartStoreId());
+      } catch (err) {
+        document.getElementById('content').innerHTML =
+          `<div class="empty"><div class="empty__emoji">🏪</div><h3>โหลดข้อมูลร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p></div>`;
+        return;
+      }
+      OPEN = toMinutes(STORE.open_time);
+      CLOSE = toMinutes(STORE.close_time);
       syncPickup();
       render();
       syncCartWithMenu();

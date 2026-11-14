@@ -13,6 +13,8 @@ const DEFAULT_CATEGORY = 'อาหารจานเดียว';
 const STORE_EMAIL = 'store@prefood.dpu.ac.th';
 const STORE_PASSWORD = 'store1234';
 const STORE_NAME = 'PRE-FOOD Kitchen';
+const STORE_DESCRIPTION = 'อาหารตามสั่ง · ก๋วยเตี๋ยว · เครื่องดื่ม';
+const STORE_LOCATION = 'โรงอาหารกลาง DPU';
 
 // บัญชีผู้ดูแลระบบ
 const ADMIN_EMAIL = 'admin@prefood.dpu.ac.th';
@@ -81,9 +83,20 @@ function migrate(db) {
     db.exec('ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))');
     console.log('Migrated: added users.phone, users.is_active');
   }
+
+  // ผูกเมนูและออเดอร์กับร้าน
+  for (const table of ['menu_items', 'orders']) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes('store_id')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN store_id INTEGER REFERENCES stores(id)`);
+      console.log(`Migrated: added ${table}.store_id`);
+    }
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_menu_store ON menu_items(store_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_store ON orders(store_id)');
 }
 
-// ใส่ข้อมูลตั้งต้น (บัญชีร้านค้า + admin + เมนู)
+// ใส่ข้อมูลตั้งต้น (บัญชีร้านค้า + ร้าน + admin + เมนู)
 function seed(db) {
   // บัญชีร้านค้า
   const existingStore = db.prepare('SELECT id FROM users WHERE email = ?').get(STORE_EMAIL);
@@ -95,6 +108,26 @@ function seed(db) {
       'store'
     );
     console.log(`Seeded store user: ${STORE_EMAIL} / ${STORE_PASSWORD}`);
+  }
+
+  // ร้านของบัญชีร้านค้าตัวอย่าง
+  const storeUser = db.prepare('SELECT id FROM users WHERE email = ?').get(STORE_EMAIL);
+  let store = storeUser && db.prepare('SELECT id FROM stores WHERE owner_id = ?').get(storeUser.id);
+  if (storeUser && !store) {
+    const result = db
+      .prepare(
+        `INSERT INTO stores (owner_id, name, description, location, open_time, close_time, status)
+         VALUES (?, ?, ?, ?, '09:00', '19:00', 'approved')`
+      )
+      .run(storeUser.id, STORE_NAME, STORE_DESCRIPTION, STORE_LOCATION);
+    store = { id: result.lastInsertRowid };
+    console.log(`Seeded store: ${STORE_NAME}`);
+  }
+  // เมนูและออเดอร์เดิมที่ยังไม่มีร้าน ให้เป็นของร้านนี้
+  if (store) {
+    const m = db.prepare('UPDATE menu_items SET store_id = ? WHERE store_id IS NULL').run(store.id).changes;
+    const o = db.prepare('UPDATE orders SET store_id = ? WHERE store_id IS NULL').run(store.id).changes;
+    if (m || o) console.log(`Migrated: ${m} menu items, ${o} orders -> store #${store.id}`);
   }
 
   // บัญชี admin
@@ -112,9 +145,9 @@ function seed(db) {
 
   // เมนูตัวอย่าง
   const menuCount = db.prepare('SELECT COUNT(*) AS c FROM menu_items').get().c;
-  if (menuCount === 0) {
+  if (menuCount === 0 && store) {
     const insertMenu = db.prepare(
-      'INSERT INTO menu_items (name, description, price, category, image_url, is_available) VALUES (?, ?, ?, ?, ?, 1)'
+      'INSERT INTO menu_items (store_id, name, description, price, category, image_url, is_available) VALUES (?, ?, ?, ?, ?, ?, 1)'
     );
     const seedItems = [
       ['ข้าวกะเพราหมูสับ', 'ข้าวกะเพราหมูสับไข่ดาว รสจัดจ้าน', 45, 'อาหารจานเดียว'],
@@ -131,7 +164,7 @@ function seed(db) {
       ['น้ำเปล่า', 'น้ำดื่มขวด 600 ml', 10, 'เครื่องดื่ม'],
     ];
     const insertMany = db.transaction((items) => {
-      for (const item of items) insertMenu.run(...item, imageForName(item[0]));
+      for (const item of items) insertMenu.run(store.id, ...item, imageForName(item[0]));
     });
     insertMany(seedItems);
     console.log(`Seeded ${seedItems.length} menu items`);

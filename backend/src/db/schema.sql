@@ -14,9 +14,28 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ร้านค้า (1 บัญชีร้านค้า = 1 ร้าน)
+CREATE TABLE IF NOT EXISTS stores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    image_url TEXT,
+    open_time TEXT NOT NULL DEFAULT '09:00',   -- HH:MM
+    close_time TEXT NOT NULL DEFAULT '19:00',  -- HH:MM
+    is_accepting INTEGER NOT NULL DEFAULT 1 CHECK (is_accepting IN (0, 1)),  -- เปิดรับออเดอร์อยู่ไหม
+    slot_capacity INTEGER,                     -- ออเดอร์สูงสุดต่อช่วง 15 นาที (null = ไม่จำกัด)
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (
+        status IN ('pending', 'approved', 'rejected', 'suspended')
+    ),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- เมนูอาหาร
 CREATE TABLE IF NOT EXISTS menu_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id INTEGER REFERENCES stores(id),
     name TEXT NOT NULL,
     description TEXT,
     price REAL NOT NULL CHECK (price >= 0),
@@ -31,6 +50,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
+    store_id INTEGER REFERENCES stores(id),
     status TEXT NOT NULL CHECK (
         status IN ('pending_payment', 'paid', 'preparing', 'ready', 'completed', 'cancelled')
     ) DEFAULT 'pending_payment',

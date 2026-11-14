@@ -108,7 +108,7 @@
 
         <section class="info-grid mt-12">
           <div class="info-tile"><small>เวลารับอาหาร</small><strong>${escapeHtml(formatPickup(order.pickup_time))}</strong><div>${pickupHint(order)}</div></div>
-          <div class="info-tile"><small>จุดรับอาหาร</small><strong>${escapeHtml(STORE.name)}</strong><div class="small muted">${escapeHtml(STORE.location)}</div></div>
+          <div class="info-tile"><small>จุดรับอาหาร</small><strong>${escapeHtml(order.store_name || '-')}</strong><div class="small muted">${escapeHtml(order.store_location || '')}</div></div>
           <div class="info-tile"><small>การชำระเงิน</small><strong>${escapeHtml(PAYMENT_LABELS[order.payment_method] || 'ชำระเงินจำลอง')}</strong><div class="small text-green bold">ชำระแล้ว</div></div>
           <div class="info-tile"><small>สั่งเมื่อ</small><strong>${escapeHtml(formatDateTime(order.created_at))}</strong></div>
         </section>

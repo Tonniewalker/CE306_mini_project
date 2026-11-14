@@ -2,17 +2,18 @@
 const express = require('express');
 const db = require('../db/connection');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { requireStore } = require('../middleware/store');
 
 const router = express.Router();
 
 const ORDER_STATUSES = ['pending_payment', 'paid', 'preparing', 'ready', 'completed', 'cancelled'];
 // วิธีชำระเงิน (จำลอง)
 const PAYMENT_METHOD = 'mock_promptpay';
-// ช่วงเวลารับอาหาร (นาทีนับจากเที่ยงคืน)
-const PICKUP_OPEN = 9 * 60; // 09:00
-const PICKUP_CLOSE = 19 * 60; // 19:00
-// แปลงนาทีเป็น HH:MM
-const hhmm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+// แปลง HH:MM เป็นนาทีนับจากเที่ยงคืน
+const toMinutes = (hhmm) => {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  return h * 60 + m;
+};
 
 // เงื่อนไข SQL: ออเดอร์ที่สร้างวันนี้
 const IS_TODAY = `date(o.created_at, 'localtime') = date('now', 'localtime')`;
@@ -29,12 +30,14 @@ function attachItems(order) {
   return { ...order, items };
 }
 
-// ดึงออเดอร์พร้อมชื่อลูกค้า
+// ดึงออเดอร์พร้อมชื่อลูกค้าและร้าน
 function findOrder(id) {
   return db
     .prepare(
-      `SELECT o.*, u.name AS customer_name
-       FROM orders o JOIN users u ON u.id = o.user_id
+      `SELECT o.*, u.name AS customer_name, s.name AS store_name, s.location AS store_location
+       FROM orders o
+       JOIN users u ON u.id = o.user_id
+       LEFT JOIN stores s ON s.id = o.store_id
        WHERE o.id = ?`
     )
     .get(id);
@@ -55,12 +58,8 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
     return res.status(400).json({ error: 'รูปแบบเวลารับอาหารไม่ถูกต้อง' });
   }
   const now = new Date();
-  const pickupMinutes = pickupDate.getHours() * 60 + pickupDate.getMinutes();
   if (pickupDate.toDateString() !== now.toDateString()) {
     return res.status(400).json({ error: 'เลือกเวลารับอาหารได้เฉพาะวันนี้' });
-  }
-  if (pickupMinutes < PICKUP_OPEN || pickupMinutes > PICKUP_CLOSE) {
-    return res.status(400).json({ error: `เวลารับอาหารต้องอยู่ระหว่าง ${hhmm(PICKUP_OPEN)} – ${hhmm(PICKUP_CLOSE)} น.` });
   }
   // ต้องล่วงหน้าอย่างน้อย 5 นาที
   if (pickupDate.getTime() < now.getTime() + 5 * 60 * 1000) {
@@ -84,6 +83,7 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
     const subtotal = menuItem.price * quantity;
     totalAmount += subtotal;
     resolvedItems.push({
+      store_id: menuItem.store_id,
       menu_item_id: menuItem.id,
       item_name: menuItem.name,
       unit_price: menuItem.price,
@@ -92,19 +92,36 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
     });
   }
 
+  // สั่งได้ครั้งละ 1 ร้าน และร้านต้องเปิดรับออเดอร์
+  const storeIds = [...new Set(resolvedItems.map((ri) => ri.store_id))];
+  if (storeIds.length !== 1) {
+    return res.status(400).json({ error: 'สั่งอาหารได้ครั้งละ 1 ร้าน' });
+  }
+  const store = db.prepare("SELECT * FROM stores WHERE id = ? AND status = 'approved'").get(storeIds[0]);
+  if (!store) {
+    return res.status(400).json({ error: 'ร้านนี้ไม่เปิดให้บริการ' });
+  }
+  if (!store.is_accepting) {
+    return res.status(400).json({ error: 'ร้านนี้ปิดรับออเดอร์ชั่วคราว' });
+  }
+  const pickupMinutes = pickupDate.getHours() * 60 + pickupDate.getMinutes();
+  if (pickupMinutes < toMinutes(store.open_time) || pickupMinutes > toMinutes(store.close_time)) {
+    return res.status(400).json({ error: `เวลารับอาหารต้องอยู่ระหว่าง ${store.open_time} – ${store.close_time} น.` });
+  }
+
   const insertOrder = db.transaction(() => {
-    // เลขคิวถัดไปของวันนี้
-    const queueCountToday = db
-      .prepare(`SELECT COUNT(*) AS c FROM orders o WHERE ${IS_TODAY} AND o.status != 'pending_payment'`)
-      .get().c;
+    // เลขคิวถัดไปของร้านวันนี้
+    const lastQueue = db
+      .prepare(`SELECT COALESCE(MAX(o.queue_number), 0) AS q FROM orders o WHERE o.store_id = ? AND ${IS_TODAY}`)
+      .get(store.id).q;
 
     // บันทึกออเดอร์ (ชำระแบบจำลอง สถานะเป็น paid ทันที)
     const orderResult = db
       .prepare(
-        `INSERT INTO orders (user_id, status, pickup_time, total_amount, payment_method, queue_number)
-         VALUES (?, 'paid', ?, ?, ?, ?)`
+        `INSERT INTO orders (user_id, store_id, status, pickup_time, total_amount, payment_method, queue_number)
+         VALUES (?, ?, 'paid', ?, ?, ?, ?)`
       )
-      .run(req.user.id, pickupDate.toISOString(), totalAmount, PAYMENT_METHOD, queueCountToday + 1);
+      .run(req.user.id, store.id, pickupDate.toISOString(), totalAmount, PAYMENT_METHOD, lastQueue + 1);
 
     const orderId = orderResult.lastInsertRowid;
     const insertItem = db.prepare(
@@ -124,27 +141,23 @@ router.post('/', authenticate, requireRole('customer'), (req, res) => {
 // GET /api/orders/my - ออเดอร์ของฉัน (ผู้ใช้)
 router.get('/my', authenticate, requireRole('customer'), (req, res) => {
   const orders = db
-    .prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC, id DESC')
+    .prepare(
+      `SELECT o.*, s.name AS store_name, s.location AS store_location
+       FROM orders o LEFT JOIN stores s ON s.id = o.store_id
+       WHERE o.user_id = ? ORDER BY o.created_at DESC, o.id DESC`
+    )
     .all(req.user.id);
   res.json(orders.map(attachItems));
-});
-
-// GET /api/orders/queue/status - จำนวนคิววันนี้
-router.get('/queue/status', (req, res) => {
-  const waiting = db
-    .prepare(`SELECT COUNT(*) AS c FROM orders o WHERE ${IS_TODAY} AND o.status IN ('paid','preparing')`)
-    .get().c;
-  const ready = db
-    .prepare(`SELECT COUNT(*) AS c FROM orders o WHERE ${IS_TODAY} AND o.status = 'ready'`)
-    .get().c;
-  res.json({ waiting, ready });
 });
 
 // GET /api/orders/:id - รายละเอียดออเดอร์ + จำนวนคิวก่อนหน้า
 router.get('/:id', authenticate, (req, res) => {
   const order = findOrder(req.params.id);
   if (!order) return res.status(404).json({ error: 'ไม่พบออเดอร์นี้' });
-  if (req.user.role !== 'store' && order.user_id !== req.user.id) {
+  // เจ้าของออเดอร์, ร้านของออเดอร์ หรือ admin
+  const ownStore = req.user.role === 'store'
+    && db.prepare('SELECT id FROM stores WHERE id = ? AND owner_id = ?').get(order.store_id, req.user.id);
+  if (order.user_id !== req.user.id && !ownStore && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'ไม่มีสิทธิ์เข้าถึงออเดอร์นี้' });
   }
 
@@ -153,19 +166,19 @@ router.get('/:id', authenticate, (req, res) => {
     queueAhead = db
       .prepare(
         `SELECT COUNT(*) AS c FROM orders o
-         WHERE o.status IN ('paid','preparing') AND o.id < ?
+         WHERE o.status IN ('paid','preparing') AND o.id < ? AND o.store_id = ?
            AND date(o.created_at, 'localtime') = date(?, 'localtime')`
       )
-      .get(order.id, order.created_at).c;
+      .get(order.id, order.store_id, order.created_at).c;
   }
   res.json({ ...attachItems(order), queue_ahead: queueAhead });
 });
 
-// GET /api/orders - ออเดอร์ทั้งหมด (ร้านค้า) รองรับ ?status= และ ?scope=today
-router.get('/', authenticate, requireRole('store'), (req, res) => {
+// GET /api/orders - ออเดอร์ของร้าน (ร้านค้า) รองรับ ?status= และ ?scope=today
+router.get('/', authenticate, requireRole('store'), requireStore, (req, res) => {
   const { status, scope } = req.query;
-  const where = [];
-  const params = [];
+  const where = ['o.store_id = ?'];
+  const params = [req.store.id];
 
   if (status) {
     where.push('o.status = ?');
@@ -179,7 +192,7 @@ router.get('/', authenticate, requireRole('store'), (req, res) => {
     .prepare(
       `SELECT o.*, u.name AS customer_name
        FROM orders o JOIN users u ON u.id = o.user_id
-       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+       WHERE ${where.join(' AND ')}
        ORDER BY o.created_at DESC, o.id DESC`
     )
     .all(...params);
@@ -187,12 +200,12 @@ router.get('/', authenticate, requireRole('store'), (req, res) => {
 });
 
 // PATCH /api/orders/:id/status - เปลี่ยนสถานะออเดอร์ (ร้านค้า)
-router.patch('/:id/status', authenticate, requireRole('store'), (req, res) => {
+router.patch('/:id/status', authenticate, requireRole('store'), requireStore, (req, res) => {
   const { status } = req.body;
   if (!ORDER_STATUSES.includes(status)) {
     return res.status(400).json({ error: 'สถานะไม่ถูกต้อง' });
   }
-  const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+  const existing = db.prepare('SELECT * FROM orders WHERE id = ? AND store_id = ?').get(req.params.id, req.store.id);
   if (!existing) return res.status(404).json({ error: 'ไม่พบออเดอร์นี้' });
 
   db.prepare(`UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(

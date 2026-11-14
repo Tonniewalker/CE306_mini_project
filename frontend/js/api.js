@@ -2,17 +2,15 @@
 
 const API_BASE = '/api';
 
-// ข้อมูลร้าน
-const STORE = {
-  name: 'PRE-FOOD Kitchen',
-  tagline: 'อาหารตามสั่ง · ก๋วยเตี๋ยว · เครื่องดื่ม',
-  location: 'โรงอาหารกลาง DPU',
-  hours: '09:00 – 19:00',
-  openTime: '09:00',    // เวลารับอาหารเร็วสุด
-  closeTime: '19:00',   // เวลารับอาหารช้าสุด
-  minLeadMinutes: 15,   // สั่งล่วงหน้าขั้นต่ำ (นาที)
+// กติกาการสั่งอาหาร
+const ORDER_RULES = {
+  minLeadMinutes: 15, // สั่งล่วงหน้าขั้นต่ำ (นาที)
   minutesPerOrder: 3, // เวลาทำต่อออเดอร์ (นาที)
 };
+
+// ร้านที่กำลังดูอยู่ (โหลดด้วย loadStore)
+let STORE = null;
+const STORE_KEY = 'prefood_store';
 
 /* ---------------- Auth ---------------- */
 // อ่าน token
@@ -113,6 +111,28 @@ function requireAuth(role) {
   return user;
 }
 
+/* ---------------- ร้านค้า ---------------- */
+// โหลดข้อมูลร้าน (ไม่ระบุ id ใช้ร้านล่าสุด หรือร้านแรก)
+async function loadStore(id) {
+  id = id || localStorage.getItem(STORE_KEY);
+  let store = null;
+  if (id) {
+    try {
+      store = await apiRequest(`/stores/${id}`);
+    } catch (e) {
+      store = null;
+    }
+  }
+  if (!store) {
+    const stores = await apiRequest('/stores');
+    if (!stores.length) throw new Error('ยังไม่มีร้านค้าเปิดให้บริการ');
+    store = stores[0];
+  }
+  localStorage.setItem(STORE_KEY, store.id);
+  STORE = { ...store, hours: `${store.open_time} – ${store.close_time}` };
+  return STORE;
+}
+
 /* ---------------- รายการโปรด ---------------- */
 const FAV_KEY = 'prefood_favs';
 // อ่านรายการโปรด
@@ -164,6 +184,7 @@ function setCartQty(item, quantity) {
     delete cart[item.id];
   } else {
     cart[item.id] = {
+      store_id: item.store_id,
       menu_item_id: item.id,
       name: item.name,
       price: item.price,
@@ -173,6 +194,11 @@ function setCartQty(item, quantity) {
     };
   }
   saveCart(cart);
+}
+// ร้านของเมนูในตะกร้า (null = ตะกร้าว่าง)
+function cartStoreId() {
+  const first = Object.values(getCart())[0];
+  return first ? first.store_id : null;
 }
 // จำนวนของเมนูนี้ในตะกร้า
 function cartQty(id) {
@@ -189,7 +215,9 @@ function cartTotal() {
 
 // สั่งซ้ำ: ใส่เมนูจากออเดอร์เก่าลงตะกร้า
 async function reorder(order) {
-  const menu = await apiRequest('/menu');
+  const menu = await apiRequest(`/stores/${order.store_id}/menu`);
+  // ตะกร้ามีของร้านอื่นอยู่ ให้เริ่มตะกร้าใหม่
+  if (cartStoreId() && cartStoreId() !== order.store_id) clearCart();
   const byId = new Map(menu.map((m) => [m.id, m]));
   let added = 0;
   let missing = 0;
