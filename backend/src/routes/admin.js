@@ -1,0 +1,106 @@
+// API ผู้ดูแลระบบ
+const crypto = require('crypto');
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const db = require('../db/connection');
+const { authenticate, requireRole } = require('../middleware/auth');
+
+const router = express.Router();
+router.use(authenticate, requireRole('admin'));
+
+const STORE_STATUSES = ['pending', 'approved', 'rejected', 'suspended'];
+// สถานะร้านที่เปลี่ยนไปได้
+const STORE_TRANSITIONS = {
+  pending: ['approved', 'rejected'],
+  approved: ['suspended'],
+  suspended: ['approved'],
+  rejected: ['approved'],
+};
+
+// ดึงร้านพร้อมข้อมูลเจ้าของ
+function storeQuery(where = '') {
+  return `SELECT s.id, s.name, s.description, s.status, s.created_at, s.image_url,
+                 u.id AS owner_id, u.name AS owner_name, u.email AS owner_email, u.phone AS owner_phone
+          FROM stores s JOIN users u ON u.id = s.owner_id ${where}`;
+}
+
+// GET /api/admin/stores - รายการร้าน (กรองด้วย ?status=)
+router.get('/stores', (req, res) => {
+  const { status } = req.query;
+  if (status && !STORE_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'สถานะร้านไม่ถูกต้อง' });
+  }
+  const stores = status
+    ? db.prepare(storeQuery('WHERE s.status = ? ORDER BY s.created_at, s.id')).all(status)
+    : db.prepare(storeQuery('ORDER BY s.created_at, s.id')).all();
+  res.json(stores);
+});
+
+// PATCH /api/admin/stores/:id/status - อนุมัติ/ปฏิเสธ/ระงับร้าน
+router.patch('/stores/:id/status', (req, res) => {
+  const { status } = req.body;
+  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(req.params.id);
+  if (!store) return res.status(404).json({ error: 'ไม่พบร้านค้านี้' });
+  if (!(STORE_TRANSITIONS[store.status] || []).includes(status)) {
+    return res.status(409).json({ error: 'เปลี่ยนสถานะร้านแบบนี้ไม่ได้ กรุณารีเฟรช' });
+  }
+  db.prepare('UPDATE stores SET status = ? WHERE id = ? AND status = ?').run(status, store.id, store.status);
+  res.json(db.prepare(storeQuery('WHERE s.id = ?')).get(store.id));
+});
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// สุ่มรหัสผ่านชั่วคราว 8 ตัว (ตัด 0/O/1/l ที่อ่านสับสน)
+function tempPassword() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.randomBytes(8), (b) => chars[b % chars.length]).join('');
+}
+
+// GET /api/admin/applications - ใบสมัครร้านค้า (กรองด้วย ?status=)
+router.get('/applications', (req, res) => {
+  const { status } = req.query;
+  const apps = status
+    ? db.prepare('SELECT * FROM store_applications WHERE status = ? ORDER BY created_at, id').all(status)
+    : db.prepare('SELECT * FROM store_applications ORDER BY created_at DESC, id DESC').all();
+  res.json(apps);
+});
+
+// POST /api/admin/applications/:id/approve - อนุมัติและสร้างบัญชีร้าน
+router.post('/applications/:id/approve', (req, res) => {
+  const app = db.prepare('SELECT * FROM store_applications WHERE id = ?').get(req.params.id);
+  if (!app) return res.status(404).json({ error: 'ไม่พบใบสมัครนี้' });
+  if (app.status !== 'pending') return res.status(409).json({ error: 'ใบสมัครนี้ตรวจไปแล้ว' });
+
+  const email = (typeof req.body.email === 'string' ? req.body.email.trim() : app.email).toLowerCase();
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' });
+  if (db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email)) {
+    return res.status(409).json({ error: 'อีเมลนี้มีบัญชีอยู่แล้ว กรุณาใช้อีเมลอื่นสำหรับบัญชีร้าน' });
+  }
+
+  const password = tempPassword();
+  const storeId = db.transaction(() => {
+    const user = db
+      .prepare("INSERT INTO users (name, email, password_hash, role, phone) VALUES (?, ?, ?, 'store', ?)")
+      .run(app.contact_name, email, bcrypt.hashSync(password, 10), app.phone);
+    const store = db
+      .prepare("INSERT INTO stores (owner_id, name, description, status) VALUES (?, ?, ?, 'approved')")
+      .run(user.lastInsertRowid, app.store_name, app.description);
+    db.prepare(
+      "UPDATE store_applications SET status = 'approved', store_id = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(store.lastInsertRowid, app.id);
+    return store.lastInsertRowid;
+  })();
+
+  res.json({ store_id: storeId, store_name: app.store_name, email, password });
+});
+
+// POST /api/admin/applications/:id/reject - ปฏิเสธใบสมัคร
+router.post('/applications/:id/reject', (req, res) => {
+  const result = db
+    .prepare("UPDATE store_applications SET status = 'rejected', updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
+    .run(req.params.id);
+  if (!result.changes) return res.status(409).json({ error: 'ไม่พบใบสมัคร หรือใบสมัครนี้ตรวจไปแล้ว' });
+  res.json({ success: true });
+});
+
+module.exports = router;

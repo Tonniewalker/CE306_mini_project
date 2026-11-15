@@ -21,8 +21,7 @@
       <main class="main-wrap">
         <a class="back-link" href="stores.html" id="backLink">ร้านทั้งหมด</a>
         <div class="greet">
-          <h1 id="greetTitle">สั่งล่วงหน้าเลย ไม่ต้องต่อคิว</h1>
-          <!-- <p>สั่งล่วงหน้า แล้วมารับตามเวลา ไม่ต้องต่อคิว</p> -->
+          <h1 id="greetTitle">เมนูอาหาร</h1>
           <p id="greetSub"></p>
         </div>
 
@@ -450,7 +449,7 @@
       })
       .catch((err) => {
         document.getElementById('grid').innerHTML =
-          `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">🏪</div><h3>โหลดข้อมูลร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p></div>`;
+          `<div class="empty" style="grid-column:1/-1"><div class="empty__emoji">🍽️</div><h3>โหลดข้อมูลร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p></div>`;
       });
   </script>
 </body>

@@ -83,6 +83,11 @@ async function apiRequest(path, { method = 'GET', body, file, auth = false } = {
     window.location.href = 'stores.html?auth=login&suspended=1';
     throw new Error(data.error);
   }
+  // ร้านยังไม่ได้รับอนุมัติ ให้ไปหน้าสถานะร้าน
+  if (res.status === 403 && auth && data && /^(store_|no_store)/.test(data.code || '')) {
+    if (!location.pathname.endsWith('store-pending.html')) window.location.href = 'store-pending.html';
+    throw new Error(data.error);
+  }
   if (!res.ok) {
     throw new Error((data && data.error) || `เกิดข้อผิดพลาด (${res.status})`);
   }
@@ -368,7 +373,7 @@ function initials(name) {
 const STATUS = {
   pending_payment: { label: 'รอชำระเงิน', emoji: '💳', title: 'รอชำระเงิน', desc: 'กรุณาชำระเงินเพื่อยืนยันออเดอร์' },
   paid: { label: 'รอร้านรับออเดอร์', emoji: '🧾', title: 'ส่งออเดอร์ถึงร้านแล้ว', desc: 'ร้านได้รับออเดอร์ของคุณแล้ว กำลังจะเริ่มทำ' },
-  preparing: { label: 'กำลังเตรียมอาหาร', emoji: '👨‍🍳', title: 'กำลังเตรียมอาหาร', desc: 'ร้านกำลังทำอาหารให้คุณ ไม่ต้องรีบมาต่อคิว' },
+  preparing: { label: 'กำลังเตรียมอาหาร', emoji: '👨‍🍳', title: 'กำลังเตรียมอาหาร', desc: 'ร้านกำลังทำอาหารให้คุณ' },
   ready: { label: 'พร้อมรับอาหาร', emoji: '🛎️', title: 'อาหารพร้อมรับแล้ว!', desc: 'แสดงเลขคิวที่หน้าร้านเพื่อรับอาหารได้เลย' },
   completed: { label: 'รับอาหารแล้ว', emoji: '😋', title: 'รับอาหารเรียบร้อย', desc: 'ขอบคุณที่ใช้ PRE-FOOD ทานให้อร่อยนะ' },
   cancelled: { label: 'ลูกค้ายกเลิก', emoji: '🙏', title: 'ออเดอร์ถูกยกเลิก', desc: 'คุณยกเลิกออเดอร์แล้ว ระบบคืนเงินให้แล้ว (จำลอง)' },

@@ -61,7 +61,7 @@ function migrate(db) {
         DROP TABLE users;
         ALTER TABLE users_new RENAME TO users;
       `);
-      // เปลี่ยนบัญชีร้านค้าเดิม (admin@) เป็นบัญชีร้านค้าปัจจุบัน
+      // ย้ายบัญชีร้านค้า admin@ ไปใช้อีเมล store@
       if (!hadStore) {
         db.prepare('UPDATE users SET email = ?, name = ?, password_hash = ? WHERE email = ?').run(
           STORE_EMAIL, STORE_NAME, bcrypt.hashSync(STORE_PASSWORD, 10), 'admin@prefood.dpu.ac.th'
@@ -90,7 +90,7 @@ function migrate(db) {
       console.log(`Migrated: added ${table}.store_id`);
     }
   }
-  // อัปเดตตาราง orders (สถานะใหม่ + การชำระเงิน)
+  // สร้างตาราง orders ใหม่ให้ตรงกับ schema
   const ordersSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get().sql;
   if (!ordersSql.includes("'no_show'")) {
     const ddl = fs.readFileSync(SCHEMA_PATH, 'utf-8')
@@ -138,14 +138,19 @@ function migrate(db) {
     console.log(`Migrated: status logs for ${noLog.length} orders`);
   }
 
-  // เลิกใช้คอลัมน์จุดรับอาหารของร้าน
+  // ลบคอลัมน์ location ของร้าน
   const storeCols = db.prepare('PRAGMA table_info(stores)').all().map((c) => c.name);
   if (storeCols.includes('location')) {
     db.exec('ALTER TABLE stores DROP COLUMN location');
     console.log('Migrated: removed stores.location');
   }
+  // ลบคอลัมน์ slot_capacity ของร้าน
+  if (storeCols.includes('slot_capacity')) {
+    db.exec('ALTER TABLE stores DROP COLUMN slot_capacity');
+    console.log('Migrated: removed stores.slot_capacity');
+  }
 
-  // เลิกใช้รูปจากลิงก์เว็บอื่น
+  // ล้างรูปเมนูที่ไม่ได้อยู่ใน /uploads
   const external = db
     .prepare("UPDATE menu_items SET image_url = NULL WHERE image_url IS NOT NULL AND image_url NOT LIKE '/uploads/%'")
     .run().changes;
@@ -182,7 +187,7 @@ function seed(db) {
     store = { id: result.lastInsertRowid };
     console.log(`Seeded store: ${STORE_NAME}`);
   }
-  // เมนูและออเดอร์เดิมที่ยังไม่มีร้าน ให้เป็นของร้านนี้
+  // เมนูและออเดอร์ที่ยังไม่มีร้าน ให้เป็นของร้านนี้
   if (store) {
     const m = db.prepare('UPDATE menu_items SET store_id = ? WHERE store_id IS NULL').run(store.id).changes;
     const o = db.prepare('UPDATE orders SET store_id = ? WHERE store_id IS NULL').run(store.id).changes;

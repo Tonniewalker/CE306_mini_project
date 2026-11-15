@@ -106,7 +106,7 @@
     function heroSub(order) {
       if (order.status === 'paid' || order.status === 'preparing') {
         return order.queue_ahead > 0
-          ? `มีคิวก่อนหน้าคุณ ${order.queue_ahead} ออเดอร์ · ไม่ต้องรีบมาต่อคิว`
+          ? `มีคิวก่อนหน้าคุณ ${order.queue_ahead} ออเดอร์`
           : 'คุณเป็นคิวถัดไป! ร้านกำลังดูแลออเดอร์ของคุณ';
       }
       return STATUS[order.status].desc;

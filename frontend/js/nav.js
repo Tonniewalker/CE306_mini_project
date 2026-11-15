@@ -98,7 +98,7 @@ function openAuthModal(mode = 'login', options = {}) {
         <div class="auth-modal__emoji" aria-hidden="true">${isLogin ? '🍜' : '🍛'}</div>
         <div class="brand"><span class="brand__mark">🍱</span><span class="brand__text">PRE<span>-</span>FOOD</span></div>
         <h2>${isLogin ? 'ยินดีต้อนรับกลับ 👋' : 'สมัครสมาชิก'}</h2>
-        <p>${isLogin ? 'เข้าสู่ระบบเพื่อสั่งอาหารล่วงหน้า ไม่ต้องต่อคิว' : 'สร้างบัญชีฟรี แล้วเริ่มสั่งได้ทันที'}</p>
+        <p>${isLogin ? 'เข้าสู่ระบบเพื่อสั่งอาหารและติดตามออเดอร์' : 'สร้างบัญชีฟรี แล้วเริ่มสั่งได้ทันที'}</p>
       </div>
       <div class="auth-modal__body">
         <div class="tabs" role="tablist">
@@ -176,7 +176,8 @@ function openAuthModal(mode = 'login', options = {}) {
       setAuth(data.token, data.user);
       modal.setDismissible(false);
       if (data.user.role !== 'customer') {
-        location.href = homePage(data.user.role);
+        // ร้านที่ถูกระงับไปหน้าสถานะร้าน
+        location.href = data.store_status && data.store_status !== 'approved' ? 'store-pending.html' : homePage(data.user.role);
         return;
       }
       sessionStorage.setItem('prefood_toast', current === 'login' ? `สวัสดี ${data.user.name} 👋` : 'สมัครสมาชิกสำเร็จ ยินดีต้อนรับ!');
@@ -229,6 +230,7 @@ const PANELS = {
     links: [
       ['orders', 'store-orders.html', 'board', 'ออเดอร์ & คิว', 'ออเดอร์'],
       ['menu', 'store-menu.html', 'utensils', 'จัดการเมนู', 'เมนู'],
+      ['settings', 'store-settings.html', 'settings', 'ตั้งค่าร้าน', 'ตั้งค่า'],
     ],
   },
   admin: {

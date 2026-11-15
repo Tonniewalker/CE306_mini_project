@@ -364,7 +364,7 @@
           modal.setTitle('ชำระเงินไม่สำเร็จ');
           modal.setBody(`<div class="alert alert--error">${icon('alert')}<span>${escapeHtml(err.message)}</span></div><p class="small muted">ยังไม่มีการตัดเงิน ลองตรวจสอบตะกร้าแล้วลองใหม่อีกครั้ง</p>`);
           modal.setFoot(`<button class="btn btn--block" data-act="close">กลับไปที่ตะกร้า</button>`);
-          modal.el.querySelector('[data-act="close"]').onclick = () => { modal.close(); syncCartWithMenu(); };
+          modal.el.querySelector('[data-act="close"]').onclick = async () => { modal.close(); await refreshStore(); syncCartWithMenu(); };
         }
       };
     }
@@ -388,13 +388,23 @@
       render();
     }
 
+    // โหลดข้อมูลร้านล่าสุด เช่น เวลาเปิด-ปิด และการเปิดรับออเดอร์
+    async function refreshStore() {
+      try {
+        const s = await apiRequest(`/stores/${STORE.id}`);
+        STORE = { ...s, hours: `${s.open_time} – ${s.close_time}` };
+        OPEN = toMinutes(STORE.open_time);
+        CLOSE = toMinutes(STORE.close_time);
+      } catch (e) { /* ใช้ข้อมูลเดิม */ }
+    }
+
     // เริ่มต้นหน้า
     async function init() {
       try {
         await loadStore(cartStoreId());
       } catch (err) {
         document.getElementById('content').innerHTML =
-          `<div class="empty"><div class="empty__emoji">🏪</div><h3>โหลดข้อมูลร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p></div>`;
+          `<div class="empty"><div class="empty__emoji">🍽️</div><h3>โหลดข้อมูลร้านไม่สำเร็จ</h3><p>${escapeHtml(err.message)}</p></div>`;
         return;
       }
       OPEN = toMinutes(STORE.open_time);
@@ -402,8 +412,9 @@
       syncPickup();
       render();
       syncCartWithMenu();
-      // อัปเดตเวลาที่เลือกได้ทุก 20 วินาที
-      setInterval(() => {
+      // อัปเดตข้อมูลร้านและเวลาที่เลือกได้ทุก 20 วินาที
+      setInterval(async () => {
+        await refreshStore();
         const wasClosed = pickupMin === null;
         syncPickup();
         if (wasClosed !== (pickupMin === null)) { if (!document.querySelector('.modal-backdrop')) render(); }

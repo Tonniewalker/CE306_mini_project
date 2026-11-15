@@ -22,38 +22,39 @@ function signToken(user) {
   );
 }
 
-// POST /api/auth/register - สมัครสมาชิก
+// ตรวจข้อมูลบัญชีที่สมัคร คืน { error } หรือ { name, email, password }
+function readAccount(body) {
+  const name = str(body.name);
+  const email = str(body.email).toLowerCase();
+  const password = typeof body.password === 'string' ? body.password : '';
+
+  if (!name || !email || !password) return { error: 'กรุณากรอกชื่อ อีเมล และรหัสผ่านให้ครบ' };
+  if (name.length > 100) return { error: 'ชื่อยาวเกินไป' };
+  if (!EMAIL_RE.test(email)) return { error: 'รูปแบบอีเมลไม่ถูกต้อง' };
+  if (password.length < 6 || password.length > 72) return { error: 'รหัสผ่านต้องมี 6–72 ตัวอักษร' };
+  if (db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email)) {
+    return { error: 'อีเมลนี้ถูกใช้งานแล้ว', status: 409 };
+  }
+  return { name, email, password };
+}
+
+// สถานะร้านของบัญชีร้านค้า
+function storeStatusOf(userId) {
+  const store = db.prepare('SELECT status FROM stores WHERE owner_id = ?').get(userId);
+  return store ? store.status : null;
+}
+
+// POST /api/auth/register - สมัครสมาชิก (ผู้ใช้)
 router.post('/register', (req, res) => {
-  const name = str(req.body.name);
-  const email = str(req.body.email).toLowerCase();
-  const password = typeof req.body.password === 'string' ? req.body.password : '';
+  const acc = readAccount(req.body);
+  if (acc.error) return res.status(acc.status || 400).json({ error: acc.error });
 
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'กรุณากรอกชื่อ อีเมล และรหัสผ่านให้ครบ' });
-  }
-  if (name.length > 100) {
-    return res.status(400).json({ error: 'ชื่อยาวเกินไป' });
-  }
-  if (!EMAIL_RE.test(email)) {
-    return res.status(400).json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' });
-  }
-  if (password.length < 6 || password.length > 72) {
-    return res.status(400).json({ error: 'รหัสผ่านต้องมี 6–72 ตัวอักษร' });
-  }
-
-  const existing = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email);
-  if (existing) {
-    return res.status(409).json({ error: 'อีเมลนี้ถูกใช้งานแล้ว' });
-  }
-
-  const passwordHash = bcrypt.hashSync(password, 10);
   const result = db
     .prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)')
-    .run(name, email, passwordHash, 'customer');
+    .run(acc.name, acc.email, bcrypt.hashSync(acc.password, 10), 'customer');
 
-  const user = { id: result.lastInsertRowid, name, email, role: 'customer' };
-  const token = signToken(user);
-  res.status(201).json({ token, user });
+  const user = { id: result.lastInsertRowid, name: acc.name, email: acc.email, role: 'customer' };
+  res.status(201).json({ token: signToken(user), user });
 });
 
 // POST /api/auth/login - เข้าสู่ระบบ
@@ -77,6 +78,7 @@ router.post('/login', (req, res) => {
   res.json({
     token,
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    store_status: user.role === 'store' ? storeStatusOf(user.id) : undefined,
   });
 });
 

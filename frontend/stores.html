@@ -20,8 +20,8 @@
 
       <main class="main-wrap">
         <div class="greet">
-          <h1 id="greetTitle">สั่งล่วงหน้าเลย ไม่ต้องต่อคิว</h1>
-          <p>เลือกร้าน สั่งอาหาร แล้วมารับตามเวลาที่เลือก</p>
+          <h1 id="greetTitle">วันนี้กินอะไรดี? 🍜</h1>
+          <p id="greetSub">เลือกร้านที่อยากสั่งได้เลย</p>
         </div>
 
         <div class="search-xl">
@@ -39,6 +39,8 @@
           <div class="skeleton" style="height:240px"></div>
           <div class="skeleton" style="height:240px"></div>
         </section>
+
+        <p class="site-foot">เจ้าของร้านอาหาร? <a href="partner.html">สมัครเป็นร้านค้า</a></p>
       </main>
     </div>
   </div>
@@ -56,6 +58,7 @@
 
     if (user && user.role === 'customer') {
       document.getElementById('greetTitle').textContent = `สวัสดี, ${user.name.split(' ')[0]} 👋`;
+      document.getElementById('greetSub').textContent = 'วันนี้กินอะไรดี?';
     }
 
     // การ์ดร้าน

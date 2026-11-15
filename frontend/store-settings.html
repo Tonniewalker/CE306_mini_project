@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2a0b6b">
+<title>ตั้งค่าร้าน · ร้านค้า PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="store-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="store-main">
+      <header class="store-topbar" id="store-topbar"></header>
+      <main class="store-content">
+        <div class="settings-layout">
+          <form id="storeForm" novalidate class="stack" style="gap:12px">
+            <div id="formAlert" hidden></div>
+
+            <section class="card">
+              <div class="card__title">ข้อมูลร้าน</div>
+              <div class="settings-cover" id="cover"></div>
+              <div class="row mt-8" style="gap:8px">
+                <label class="btn btn--sm btn--white" for="s-file" id="pickBtn"></label>
+                <input type="file" id="s-file" accept="image/*" hidden>
+                <button type="button" class="btn btn--sm btn--ghost" id="removeImg">ลบรูป</button>
+              </div>
+              <p class="hint">รูปหน้าร้านที่ลูกค้าเห็นในหน้าแรก ระบบย่อขนาดให้อัตโนมัติ</p>
+              <div class="field mt-12">
+                <label class="label" for="s-name">ชื่อร้าน</label>
+                <input class="input" id="s-name" maxlength="100">
+              </div>
+              <div class="field">
+                <label class="label" for="s-desc">คำอธิบายร้าน</label>
+                <textarea class="input" id="s-desc" rows="2" maxlength="300" placeholder="เช่น อาหารตามสั่ง ก๋วยเตี๋ยว"></textarea>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card__title">การรับออเดอร์</div>
+              <label class="switch">
+                <input type="checkbox" id="s-accepting">
+                <span class="switch__track"></span>
+                <span class="small bold" id="acceptLabel">เปิดรับออเดอร์</span>
+              </label>
+              <p class="hint">ปิดไว้เมื่ออยากหยุดรับออเดอร์ชั่วคราว ออเดอร์ที่รับแล้วยังอยู่ตามปกติ</p>
+              <div class="row mt-12" style="gap:12px;align-items:flex-start">
+                <div class="field grow">
+                  <label class="label" for="s-open">เวลาเปิด</label>
+                  <input class="input" id="s-open" type="time">
+                </div>
+                <div class="field grow">
+                  <label class="label" for="s-close">เวลาปิด</label>
+                  <input class="input" id="s-close" type="time">
+                </div>
+              </div>
+              <p class="hint" id="devNote" hidden>⚠️ เปิดโหมดทดสอบอยู่ (DEV_ALWAYS_OPEN) ลูกค้าจะเห็นร้านเปิด 00:00–23:59 จนกว่าจะปิดโหมดนี้</p>
+            </section>
+
+            <button class="btn btn--lg btn--shadow" type="submit" id="saveBtn">บันทึกการตั้งค่า</button>
+          </form>
+
+          <section class="card settings-side">
+            <div class="card__title">บัญชีร้าน</div>
+            <p class="small muted">อีเมลเข้าสู่ระบบ</p>
+            <p class="bold" id="accEmail"></p>
+            <div class="card__title mt-16">เปลี่ยนรหัสผ่าน</div>
+            <div id="pwAlert" hidden></div>
+            <form id="pwForm" novalidate>
+              <div class="field">
+                <label class="label" for="pw-current">รหัสผ่านปัจจุบัน</label>
+                <input class="input" id="pw-current" type="password" autocomplete="current-password">
+              </div>
+              <div class="field">
+                <label class="label" for="pw-new">รหัสผ่านใหม่</label>
+                <input class="input" id="pw-new" type="password" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัวอักษร">
+              </div>
+              <div class="field">
+                <label class="label" for="pw-confirm">ยืนยันรหัสผ่านใหม่</label>
+                <input class="input" id="pw-confirm" type="password" autocomplete="new-password">
+              </div>
+              <button class="btn btn--block" type="submit" id="pwSave">เปลี่ยนรหัสผ่าน</button>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าตั้งค่าร้าน
+    const user = requireAuth('store');
+    if (user) renderStoreShell('settings', 'ตั้งค่าร้าน');
+    const $ = (id) => document.getElementById(id);
+    $('pickBtn').innerHTML = `${icon('image', 'icon-sm')}เลือกรูป`;
+    $('accEmail').textContent = user ? user.email : '';
+
+    let store = null;
+    let imageUrl = '';
+
+    // แสดงรูปร้าน
+    function renderCover() {
+      $('cover').innerHTML = imageUrl
+        ? `<img src="${escapeHtml(imageUrl)}" alt="">`
+        : '<span>🍽️</span>';
+      $('removeImg').hidden = !imageUrl;
+    }
+
+    // ใส่ค่าร้านลงฟอร์ม
+    function fillForm() {
+      imageUrl = store.image_url || '';
+      $('s-name').value = store.name;
+      $('s-desc').value = store.description || '';
+      $('s-accepting').checked = !!store.is_accepting;
+      $('s-open').value = store.open_time;
+      $('s-close').value = store.close_time;
+      $('devNote').hidden = !store.always_open;
+      updateAcceptLabel();
+      renderCover();
+    }
+
+    function updateAcceptLabel() {
+      $('acceptLabel').textContent = $('s-accepting').checked ? 'เปิดรับออเดอร์' : 'ปิดรับออเดอร์ชั่วคราว';
+    }
+    $('s-accepting').addEventListener('change', updateAcceptLabel);
+
+    // เลือกรูปแล้วอัปโหลด
+    $('s-file').addEventListener('change', async () => {
+      const file = $('s-file').files[0];
+      $('s-file').value = '';
+      if (!file) return;
+      hideAlert($('formAlert'));
+      $('pickBtn').classList.add('disabled');
+      $('cover').innerHTML = '<span class="small muted">กำลังอัปโหลดรูป...</span>';
+      try {
+        imageUrl = await uploadImage(file);
+      } catch (err) {
+        showAlert($('formAlert'), err.message);
+      } finally {
+        $('pickBtn').classList.remove('disabled');
+        renderCover();
+      }
+    });
+    $('removeImg').addEventListener('click', () => {
+      imageUrl = '';
+      renderCover();
+    });
+
+    // บันทึกการตั้งค่า
+    $('storeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert($('formAlert'));
+      const body = {
+        name: $('s-name').value.trim(),
+        description: $('s-desc').value.trim(),
+        image_url: imageUrl || null,
+        is_accepting: $('s-accepting').checked,
+        open_time: $('s-open').value,
+        close_time: $('s-close').value,
+      };
+      if (!body.name) return showAlert($('formAlert'), 'กรุณากรอกชื่อร้าน');
+      if (!body.open_time || !body.close_time) return showAlert($('formAlert'), 'กรุณาเลือกเวลาเปิด-ปิด');
+      if (body.open_time >= body.close_time) return showAlert($('formAlert'), 'เวลาปิดต้องหลังเวลาเปิด');
+
+      // ยืนยันก่อนเปลี่ยนการรับออเดอร์
+      if (body.is_accepting !== !!store.is_accepting) {
+        const ok = await confirmDialog(body.is_accepting
+          ? { title: 'เปิดรับออเดอร์?', message: 'ลูกค้าจะสั่งอาหารจากร้านได้ตามเวลาเปิด-ปิด', confirmText: 'เปิดรับออเดอร์' }
+          : { title: 'ปิดรับออเดอร์ชั่วคราว?', message: 'ลูกค้าจะสั่งอาหารใหม่ไม่ได้ จนกว่าจะเปิดรับอีกครั้ง', confirmText: 'ปิดรับออเดอร์', danger: true });
+        if (!ok) return;
+      }
+
+      $('saveBtn').disabled = true;
+      try {
+        store = await apiRequest('/my-store', { method: 'PUT', auth: true, body });
+        fillForm();
+        toast('บันทึกการตั้งค่าแล้ว');
+      } catch (err) {
+        showAlert($('formAlert'), err.message);
+      } finally {
+        $('saveBtn').disabled = false;
+      }
+    });
+
+    // เปลี่ยนรหัสผ่าน
+    $('pwForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert($('pwAlert'));
+      const current = $('pw-current').value;
+      const next = $('pw-new').value;
+      if (!current || !next) return showAlert($('pwAlert'), 'กรุณากรอกรหัสผ่านให้ครบ');
+      if (next.length < 6) return showAlert($('pwAlert'), 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
+      if (next !== $('pw-confirm').value) return showAlert($('pwAlert'), 'ยืนยันรหัสผ่านใหม่ไม่ตรงกัน');
+      $('pwSave').disabled = true;
+      try {
+        await apiRequest('/me/password', { method: 'PUT', auth: true, body: { current_password: current, new_password: next } });
+        $('pwForm').reset();
+        showAlert($('pwAlert'), 'เปลี่ยนรหัสผ่านแล้ว', 'success');
+      } catch (err) {
+        showAlert($('pwAlert'), err.message);
+      } finally {
+        $('pwSave').disabled = false;
+      }
+    });
+
+    // โหลดข้อมูลร้าน
+    async function init() {
+      try {
+        store = await apiRequest('/my-store', { auth: true });
+        if (store.status !== 'approved') return (location.href = 'store-pending.html');
+        fillForm();
+      } catch (err) {
+        showAlert($('formAlert'), err.message);
+      }
+    }
+    if (user) init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2a0b6b">
+<title>สถานะร้านค้า · PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="page page--narrow" style="padding-top:40px">
+    <div class="between" style="margin-bottom:20px">
+      <span id="brand"></span>
+      <button class="btn btn--sm btn--ghost text-red" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+    <section id="content">
+      <div class="skeleton" style="height:260px"></div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าสถานะร้าน: รออนุมัติ / ถูกปฏิเสธ / ถูกระงับ
+    const user = requireAuth('store');
+    document.getElementById('brand').innerHTML = brandHtml('store-pending.html');
+
+    // ข้อความของแต่ละสถานะ
+    const STATES = {
+      pending: { emoji: '⏳', title: 'รอผู้ดูแลระบบอนุมัติ', text: 'ส่งคำขอเปิดร้านแล้ว เมื่อได้รับอนุมัติจะเข้าใช้งานได้ทันที' },
+      rejected: { emoji: '🙅', title: 'คำขอเปิดร้านไม่ผ่านการอนุมัติ', text: 'กรุณาติดต่อผู้ดูแลระบบเพื่อสอบถามรายละเอียด' },
+      suspended: { emoji: '⛔', title: 'ร้านถูกระงับการใช้งาน', text: 'ตอนนี้รับออเดอร์และจัดการร้านไม่ได้ กรุณาติดต่อผู้ดูแลระบบ' },
+    };
+
+    // แสดงสถานะร้าน
+    function render(store) {
+      const s = STATES[store.status];
+      document.getElementById('content').innerHTML = `
+        <div class="empty">
+          <div class="empty__emoji">${s.emoji}</div>
+          <h3>${s.title}</h3>
+          <p class="bold mt-8">${escapeHtml(store.name)}</p>
+          <p>${s.text}</p>
+          ${store.status === 'pending' ? '<p class="small muted mt-8">หน้านี้ตรวจสถานะให้อัตโนมัติ</p>' : ''}
+          <button class="btn btn--white mt-12" onclick="load()">${icon('refresh', 'icon-sm')}ตรวจสถานะอีกครั้ง</button>
+        </div>`;
+    }
+
+    // โหลดสถานะร้าน
+    async function load() {
+      try {
+        const store = await apiRequest('/my-store', { auth: true });
+        if (store.status === 'approved') {
+          sessionStorage.setItem('prefood_toast', 'ร้านของคุณได้รับอนุมัติแล้ว 🎉');
+          location.replace('store-orders.html');
+          return;
+        }
+        render(store);
+      } catch (err) {
+        document.getElementById('content').innerHTML =
+          `<div class="empty"><div class="empty__emoji">😵</div><h3>${escapeHtml(err.message)}</h3></div>`;
+      }
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    if (user) {
+      load();
+      setInterval(load, 15000);
+    }
+  </script>
+</body>
+</html>

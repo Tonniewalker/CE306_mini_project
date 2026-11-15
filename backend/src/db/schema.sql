@@ -24,11 +24,26 @@ CREATE TABLE IF NOT EXISTS stores (
     open_time TEXT NOT NULL DEFAULT '09:00',   -- HH:MM
     close_time TEXT NOT NULL DEFAULT '19:00',  -- HH:MM
     is_accepting INTEGER NOT NULL DEFAULT 1 CHECK (is_accepting IN (0, 1)),  -- เปิดรับออเดอร์อยู่ไหม
-    slot_capacity INTEGER,                     -- ออเดอร์สูงสุดต่อช่วง 15 นาที (null = ไม่จำกัด)
     status TEXT NOT NULL DEFAULT 'pending' CHECK (
         status IN ('pending', 'approved', 'rejected', 'suspended')
     ),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ใบสมัครร้านค้า (ยังไม่ใช่บัญชี)
+CREATE TABLE IF NOT EXISTS store_applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_name TEXT NOT NULL,
+    food_type TEXT,
+    description TEXT,
+    contact_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    email TEXT NOT NULL,
+    message TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    store_id INTEGER REFERENCES stores(id),  -- ร้านที่สร้างหลังอนุมัติ
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- เมนูอาหาร

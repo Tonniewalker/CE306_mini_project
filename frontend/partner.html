@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#651fff">
+<title>สมัครเป็นร้านค้า · PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="page page--narrow" style="padding-top:28px">
+    <div class="between" style="margin-bottom:18px">
+      <span id="brand"></span>
+      <a class="back-link" href="stores.html" id="backLink">กลับหน้าแรก</a>
+    </div>
+
+    <section class="partner-hero">
+      <h1>สมัครเป็นร้านค้า 🧑‍🍳</h1>
+      <p>กรอกข้อมูลร้านด้านล่าง ทีมงานจะติดต่อกลับเพื่อเปิดบัญชีให้</p>
+      <ol class="partner-steps">
+        <li><b>1</b><span>ส่งใบสมัคร</span></li>
+        <li><b>2</b><span>ทีมงานติดต่อกลับ</span></li>
+        <li><b>3</b><span>รับบัญชีร้าน</span></li>
+      </ol>
+    </section>
+
+    <section class="card mt-16" id="formCard">
+      <div class="card__title">ใบสมัครร้านค้า</div>
+      <div id="formAlert" hidden></div>
+      <form id="appForm" novalidate>
+        <div class="field">
+          <label class="label" for="f-store">ชื่อร้าน *</label>
+          <input class="input" id="f-store" maxlength="100" placeholder="เช่น ร้านข้าวมันไก่ป้าแดง">
+        </div>
+        <div class="field">
+          <label class="label" for="f-type">ประเภทอาหาร</label>
+          <select class="input" id="f-type">
+            <option value="">เลือกประเภท</option>
+            <option>อาหารตามสั่ง</option>
+            <option>ก๋วยเตี๋ยว / เส้น</option>
+            <option>ข้าวราดแกง</option>
+            <option>เครื่องดื่ม / ของหวาน</option>
+            <option>อื่นๆ</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="f-desc">คำอธิบายร้าน</label>
+          <textarea class="input" id="f-desc" rows="2" maxlength="300" placeholder="เมนูเด่น หรือสิ่งที่อยากให้ลูกค้ารู้"></textarea>
+        </div>
+        <div class="field">
+          <label class="label" for="f-contact">ชื่อผู้ติดต่อ *</label>
+          <input class="input" id="f-contact" maxlength="100" placeholder="เช่น สมชาย ใจดี" autocomplete="name">
+        </div>
+        <div class="row" style="gap:12px;align-items:flex-start">
+          <div class="field grow">
+            <label class="label" for="f-phone">เบอร์โทร *</label>
+            <input class="input" id="f-phone" type="tel" inputmode="tel" maxlength="12" placeholder="0812345678" autocomplete="tel">
+          </div>
+          <div class="field grow">
+            <label class="label" for="f-email">อีเมล *</label>
+            <input class="input" id="f-email" type="email" placeholder="shop@example.com" autocomplete="email">
+          </div>
+        </div>
+        <p class="small muted" style="margin:-6px 0 12px">อีเมลนี้จะใช้เข้าสู่ระบบร้าน ต้องไม่ซ้ำกับบัญชีผู้ใช้ที่มีอยู่</p>
+        <div class="field">
+          <label class="label" for="f-msg">ข้อความถึงทีมงาน</label>
+          <textarea class="input" id="f-msg" rows="2" maxlength="500" placeholder="เช่น สะดวกให้ติดต่อช่วงบ่าย"></textarea>
+        </div>
+        <label class="row small" style="gap:8px;align-items:flex-start;cursor:pointer">
+          <input type="checkbox" id="f-consent" style="margin-top:3px">
+          <span>ยินยอมให้ทีมงานติดต่อกลับตามข้อมูลที่ให้ไว้</span>
+        </label>
+        <button class="btn btn--lg btn--block btn--shadow mt-16" type="submit" id="sendBtn">ส่งใบสมัคร</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้าสมัครเป็นร้านค้า
+    const $ = (id) => document.getElementById(id);
+    $('brand').innerHTML = brandHtml();
+    $('backLink').insertAdjacentHTML('afterbegin', icon('back', 'icon-sm'));
+
+    // กรอกชื่อผู้ติดต่อให้ถ้าล็อกอินอยู่
+    const user = getUser();
+    if (user && user.role === 'customer') $('f-contact').value = user.name;
+
+    // แสดงหน้าส่งสำเร็จ
+    function showDone(id) {
+      $('formCard').innerHTML = `
+        <div class="empty" style="border:0">
+          <div class="empty__emoji">🎉</div>
+          <h3>ได้รับใบสมัครแล้ว</h3>
+          <p class="bold mt-4">เลขที่ใบสมัคร #${String(id).padStart(5, '0')}</p>
+          <p>ทีมงานจะติดต่อกลับทางเบอร์โทรหรืออีเมลภายใน 1–3 วันทำการ<br>เมื่ออนุมัติแล้วจะได้รับอีเมลและรหัสผ่านสำหรับเข้าสู่ระบบร้านค้า</p>
+          <a class="btn mt-12" href="stores.html">กลับหน้าแรก</a>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ส่งใบสมัคร
+    $('appForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideAlert($('formAlert'));
+      const body = {
+        store_name: $('f-store').value.trim(),
+        food_type: $('f-type').value,
+        description: $('f-desc').value.trim(),
+        contact_name: $('f-contact').value.trim(),
+        phone: $('f-phone').value.trim(),
+        email: $('f-email').value.trim(),
+        message: $('f-msg').value.trim(),
+      };
+      if (!body.store_name || !body.contact_name || !body.phone || !body.email) {
+        return showAlert($('formAlert'), 'กรุณากรอกชื่อร้าน ชื่อผู้ติดต่อ เบอร์โทร และอีเมลให้ครบ');
+      }
+      if (!$('f-consent').checked) return showAlert($('formAlert'), 'กรุณาติ๊กยินยอมให้ทีมงานติดต่อกลับ');
+      $('sendBtn').disabled = true;
+      try {
+        const data = await apiRequest('/applications', { method: 'POST', body });
+        showDone(data.id);
+      } catch (err) {
+        showAlert($('formAlert'), err.message);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        $('sendBtn').disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

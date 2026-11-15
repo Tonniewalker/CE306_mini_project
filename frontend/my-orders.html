@@ -92,7 +92,7 @@
       const el = document.getElementById('list');
       if (list.length === 0) {
         el.innerHTML = tab === 'active'
-          ? `<div class="empty"><div class="empty__emoji">🍽️</div><h3>ยังไม่มีออเดอร์ที่กำลังทำ</h3><p>หิวแล้วใช่ไหม? สั่งล่วงหน้าได้เลย ไม่ต้องต่อคิว</p><a class="btn" href="stores.html">${icon('utensils', 'icon-sm')}เลือกร้าน</a></div>`
+          ? `<div class="empty"><div class="empty__emoji">🍽️</div><h3>ยังไม่มีออเดอร์ที่กำลังทำ</h3><p>หิวแล้วใช่ไหม? ไปเลือกร้านกันเลย</p><a class="btn" href="stores.html">${icon('utensils', 'icon-sm')}เลือกร้าน</a></div>`
           : `<div class="empty"><div class="empty__emoji">🧾</div><h3>ยังไม่มีประวัติการสั่ง</h3><p>ออเดอร์ที่รับอาหารแล้วจะแสดงที่นี่</p></div>`;
         return;
       }
