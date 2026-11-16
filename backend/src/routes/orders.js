@@ -321,6 +321,10 @@ router.patch('/:id/status', authenticate, requireRole('store'), requireStore, (r
       error: `เปลี่ยนสถานะจาก "${STATUS_LABELS[existing.status]}" เป็น "${STATUS_LABELS[status] || status}" ไม่ได้`,
     });
   }
+  // กดไม่มารับได้เมื่อเลยเวลารับแล้ว
+  if (status === 'no_show' && new Date(existing.pickup_time) > new Date()) {
+    return res.status(400).json({ error: 'ยังไม่ถึงเวลารับอาหาร' });
+  }
   if (status === 'rejected' && !reason) {
     return res.status(400).json({ error: 'กรุณาระบุเหตุผลที่ปฏิเสธออเดอร์' });
   }

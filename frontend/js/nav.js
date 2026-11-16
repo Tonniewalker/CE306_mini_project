@@ -230,6 +230,7 @@ const PANELS = {
     links: [
       ['orders', 'store-orders.html', 'board', 'ออเดอร์ & คิว', 'ออเดอร์'],
       ['menu', 'store-menu.html', 'utensils', 'จัดการเมนู', 'เมนู'],
+      ['reports', 'store-reports.html', 'chart', 'รายงาน', 'รายงาน'],
       ['settings', 'store-settings.html', 'settings', 'ตั้งค่าร้าน', 'ตั้งค่า'],
     ],
   },

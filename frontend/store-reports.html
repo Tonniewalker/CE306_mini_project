@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2a0b6b">
+<title>รายงาน · ร้านค้า PRE-FOOD</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Prompt:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="store-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="store-main">
+      <header class="store-topbar" id="store-topbar"></header>
+      <main class="store-content">
+        <div class="chips" id="ranges" role="tablist">
+          <button class="chip" data-days="1">วันนี้</button>
+          <button class="chip active" data-days="7">7 วัน</button>
+          <button class="chip" data-days="30">30 วัน</button>
+        </div>
+
+        <section class="stat-grid mt-12" id="stats"></section>
+
+        <div class="report-grid mt-16">
+          <section class="card report-chart-card">
+            <div class="between" style="margin-bottom:4px">
+              <div class="card__title" style="margin:0" id="chartTitle">ยอดขายรายวัน</div>
+              <span class="small muted" id="chartTotal"></span>
+            </div>
+            <div id="chart"><div class="skeleton" style="height:220px"></div></div>
+          </section>
+
+          <section class="card">
+            <div class="card__title">เมนูขายดี</div>
+            <div id="topItems"></div>
+          </section>
+
+          <section class="card">
+            <div class="card__title">สถานะออเดอร์</div>
+            <div id="statusList"></div>
+          </section>
+        </div>
+        <p class="tiny muted mt-12">ยอดขายนับเฉพาะออเดอร์ที่ลูกค้ารับอาหารแล้ว</p>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    // หน้ารายงานร้าน
+    const user = requireAuth('store');
+    if (user) renderStoreShell('reports', 'รายงาน');
+    const $ = (id) => document.getElementById(id);
+    let days = 7;
+    const PLOT_H = 234; // ความสูงพื้นที่แท่งกราฟ (px)
+
+    const WEEKDAYS = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+
+    // ชื่อแท่งในกราฟ
+    function barLabel(point, short) {
+      if (days === 1) return short ? point.key : `${point.label} น.`;
+      const d = new Date(`${point.key}T00:00:00`);
+      if (!short) return d.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short' });
+      return days === 7 ? `${WEEKDAYS[d.getDay()]} ${d.getDate()}` : String(d.getDate());
+    }
+
+    // กราฟแท่งยอดขาย
+    function renderChart(points) {
+      const max = Math.max(...points.map((p) => p.sales), 0);
+      if (!max) {
+        $('chart').innerHTML = '<div class="empty" style="border:0;padding:40px 0"><div class="empty__emoji">📊</div><p>ยังไม่มียอดขายในช่วงนี้</p></div>';
+        return;
+      }
+      // เส้นแกนที่ปัดเป็นเลขกลมๆ
+      const step = niceStep(max / 3);
+      const top = Math.ceil(max / step) * step;
+      const ticks = [];
+      for (let v = 0; v <= top; v += step) ticks.push(v);
+      const every = points.length > 14 ? 5 : 1;
+
+      $('chart').innerHTML = `
+        <div class="bar-chart" role="img" aria-label="${escapeHtml($('chartTitle').textContent)} สูงสุด ${formatCurrency(max)}">
+          <div class="bar-chart__grid">
+            ${ticks.map((v) => `<div class="bar-chart__tick" style="bottom:${(v / top) * 100}%"><span>${v ? formatCurrency(v) : '0'}</span></div>`).join('')}
+          </div>
+          <div class="bar-chart__bars">
+            ${points.map((p, i) => `
+              <div class="bar-chart__col" tabindex="0">
+                <div class="bar-chart__bar" style="height:${(p.sales / top) * 100}%"></div>
+                <div class="bar-chart__tip" style="bottom:${26 + (p.sales / top) * PLOT_H + 6}px"><b>${escapeHtml(barLabel(p, false))}</b><br>${formatCurrency(p.sales)} · ${p.orders} ออเดอร์</div>
+                <div class="bar-chart__label">${i % every === 0 || i === points.length - 1 ? escapeHtml(barLabel(p, true)) : ''}</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    // ระยะห่างเส้นแกน เช่น 100, 200, 500
+    function niceStep(raw) {
+      const pow = 10 ** Math.floor(Math.log10(raw || 1));
+      const n = raw / pow;
+      return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow;
+    }
+
+    // แสดงรายงาน
+    function render(r) {
+      const failed = r.cancelled + r.rejected + r.no_show;
+      const stat = (emoji, bg, value, label) => `
+        <div class="stat"><div class="stat__icon" style="background:${bg}">${emoji}</div>
+          <div><div class="stat__value">${value}</div><div class="stat__label">${label}</div></div></div>`;
+      $('stats').innerHTML =
+        stat('💰', 'var(--amber-50)', formatCurrency(r.sales), 'ยอดขาย') +
+        stat('✅', 'var(--green-50)', r.completed, 'ออเดอร์สำเร็จ') +
+        stat('🧾', 'var(--brand-50)', formatCurrency(r.average), 'เฉลี่ยต่อออเดอร์') +
+        stat('↩️', 'var(--red-50)', failed, 'ยกเลิก / ไม่มารับ');
+
+      $('chartTitle').textContent = r.days === 1 ? 'ยอดขายตามเวลารับวันนี้' : 'ยอดขายรายวัน';
+      $('chartTotal').textContent = `รวม ${formatCurrency(r.sales)}`;
+      renderChart(r.chart);
+
+      $('topItems').innerHTML = r.top_items.length
+        ? `<table class="history-table">
+            <thead><tr><th>#</th><th>เมนู</th><th>จำนวน</th><th>ยอดขาย</th></tr></thead>
+            <tbody>${r.top_items.map((it, i) => `
+              <tr><td class="bold">${i + 1}</td><td>${escapeHtml(it.name)}</td><td>${it.quantity}</td><td class="bold">${formatCurrency(it.sales)}</td></tr>`).join('')}
+            </tbody></table>`
+        : '<p class="small muted">ยังไม่มีเมนูที่ขายได้ในช่วงนี้</p>';
+
+      const rows = [
+        ['completed', r.completed],
+        ['in_progress', r.in_progress],
+        ['cancelled', r.cancelled],
+        ['rejected', r.rejected],
+        ['no_show', r.no_show],
+      ];
+      $('statusList').innerHTML = rows.map(([st, n]) => `
+        <div class="between report-status">
+          ${st === 'in_progress' ? '<span class="pill pill--preparing"><span class="dot"></span>กำลังดำเนินการ</span>' : statusPill(st)}
+          <span class="bold">${n}</span>
+        </div>`).join('');
+    }
+
+    // โหลดรายงานตามช่วงที่เลือก
+    async function load() {
+      try {
+        render(await apiRequest(`/my-store/report?days=${days}`, { auth: true }));
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    $('ranges').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-days]');
+      if (!chip) return;
+      days = Number(chip.dataset.days);
+      $('ranges').querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
+      load();
+    });
+
+    if (user) load();
+  </script>
+</body>
+</html>
