@@ -93,11 +93,18 @@
             ${points.map((p, i) => `
               <div class="bar-chart__col" tabindex="0">
                 <div class="bar-chart__bar" style="height:${(p.sales / top) * 100}%"></div>
-                <div class="bar-chart__tip" style="bottom:${26 + (p.sales / top) * PLOT_H + 6}px"><b>${escapeHtml(barLabel(p, false))}</b><br>${formatCurrency(p.sales)} · ${p.orders} ออเดอร์</div>
+                <div class="bar-chart__tip${tipSide(i, points.length)}" style="bottom:${26 + (p.sales / top) * PLOT_H + 6}px"><b>${escapeHtml(barLabel(p, false))}</b><br>${formatCurrency(p.sales)} · ${p.orders} ออเดอร์</div>
                 <div class="bar-chart__label">${i % every === 0 || i === points.length - 1 ? escapeHtml(barLabel(p, true)) : ''}</div>
               </div>`).join('')}
           </div>
         </div>`;
+    }
+
+    // แท่งริมซ้าย/ขวา ให้ tooltip ชิดเข้าด้านใน ไม่ล้นจอ
+    function tipSide(i, n) {
+      if (i < n * 0.25) return ' bar-chart__tip--left';
+      if (i >= n * 0.75) return ' bar-chart__tip--right';
+      return '';
     }
 
     // ระยะห่างเส้นแกน เช่น 100, 200, 500

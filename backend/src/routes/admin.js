@@ -87,6 +87,64 @@ router.patch('/users/:id/status', (req, res) => {
   res.json({ id: user.id, is_active });
 });
 
+// กลุ่มสถานะออเดอร์สำหรับตัวกรอง
+const ORDER_GROUPS = {
+  active: ['paid', 'preparing', 'ready'],
+  completed: ['completed'],
+  failed: ['cancelled', 'rejected', 'no_show'],
+};
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ORDER_LIMIT = 200;
+
+// GET /api/admin/orders - ออเดอร์ทุกร้าน (?store_id= &group= &date=YYYY-MM-DD &q=)
+router.get('/orders', (req, res) => {
+  const { store_id, group, date } = req.query;
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const where = [];
+  const params = [];
+
+  if (store_id) {
+    where.push('o.store_id = ?');
+    params.push(Number(store_id));
+  }
+  if (group) {
+    const statuses = ORDER_GROUPS[group];
+    if (!statuses) return res.status(400).json({ error: 'ตัวกรองสถานะไม่ถูกต้อง' });
+    where.push(`o.status IN (${statuses.map(() => '?').join(', ')})`);
+    params.push(...statuses);
+  }
+  if (date) {
+    if (!DATE_RE.test(date)) return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง' });
+    where.push("date(o.created_at, 'localtime') = ?");
+    params.push(date);
+  }
+  if (q) {
+    // ค้นหาจากชื่อ/อีเมลลูกค้า หรือเลขออเดอร์
+    where.push("(u.name LIKE ? OR u.email LIKE ? OR CAST(o.id AS TEXT) = ?)");
+    params.push(`%${q}%`, `%${q}%`, q.replace(/^#/, ''));
+  }
+  const from = `FROM orders o
+    JOIN users u ON u.id = o.user_id
+    LEFT JOIN stores s ON s.id = o.store_id
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`;
+
+  const summary = db
+    .prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total_amount END), 0) AS sales ${from}`)
+    .get(...params);
+  const orders = db
+    .prepare(
+      `SELECT o.id, o.status, o.total_amount, o.pickup_time, o.created_at, o.queue_number,
+              u.name AS customer_name, s.name AS store_name,
+              (SELECT GROUP_CONCAT(oi.item_name || ' ×' || oi.quantity, ', ')
+                 FROM order_items oi WHERE oi.order_id = o.id) AS items_text
+       ${from}
+       ORDER BY o.created_at DESC, o.id DESC
+       LIMIT ${ORDER_LIMIT}`
+    )
+    .all(...params);
+  res.json({ total: summary.total, sales: summary.sales, limit: ORDER_LIMIT, orders });
+});
+
 // GET /api/admin/stores - รายการร้าน (กรองด้วย ?status=)
 router.get('/stores', (req, res) => {
   const { status } = req.query;

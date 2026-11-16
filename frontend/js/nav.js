@@ -240,6 +240,7 @@ const PANELS = {
       ['dashboard', 'admin-dashboard.html', 'grid', 'ภาพรวม', 'ภาพรวม'],
       ['stores', 'admin-stores.html', 'store', 'ร้านค้า', 'ร้านค้า'],
       ['users', 'admin-users.html', 'user', 'ผู้ใช้', 'ผู้ใช้'],
+      ['orders', 'admin-orders.html', 'receipt', 'ออเดอร์', 'ออเดอร์'],
     ],
   },
 };

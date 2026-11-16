@@ -1841,6 +1841,8 @@ a.avatar { color: var(--brand-700); }
 .bar-chart__label { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); font-size: 0.72rem; color: var(--ink-3); white-space: nowrap; }
 .bar-chart__tip { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; padding: 6px 10px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 0.78rem; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.12s; }
 .bar-chart__col:hover .bar-chart__tip, .bar-chart__col:focus .bar-chart__tip { opacity: 1; }
+.bar-chart__tip--left { left: 0; transform: none; }
+.bar-chart__tip--right { left: auto; right: 0; transform: none; }
 
 .modal:focus { outline: none; }
 
@@ -1861,3 +1863,12 @@ a.avatar { color: var(--brand-700); }
   .admin-store__img, .admin-store .avatar--lg { width: 48px; height: 48px; }
   .admin-store__actions { grid-column: 1 / -1; }
 }
+
+/* ออเดอร์ทุกร้านของ admin */
+.order-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.order-filters > .input { width: auto; flex: 0 1 200px; }
+.admin-orders { min-width: 760px; }
+.admin-orders tbody tr { cursor: pointer; }
+.admin-orders tbody tr:hover, .admin-orders tbody tr:focus { background: var(--surface-2); outline: none; }
+.admin-orders__items { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) { .order-filters > .input { flex: 1 1 140px; } }
