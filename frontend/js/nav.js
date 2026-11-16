@@ -207,7 +207,7 @@ function handleAuthParams() {
   const next = params.get('next');
   openAuthModal(params.get('auth') === 'register' ? 'register' : 'login', {
     next,
-    message: params.get('suspended') ? 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'
+    message: params.get('suspended') ? 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อ Admin'
       : params.get('expired') ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
       : next ? 'กรุณาเข้าสู่ระบบก่อนใช้งานส่วนนี้' : '',
   });
@@ -235,7 +235,7 @@ const PANELS = {
     ],
   },
   admin: {
-    label: 'ผู้ดูแลระบบ',
+    label: 'Admin',
     links: [
       ['dashboard', 'admin-dashboard.html', 'grid', 'ภาพรวม', 'ภาพรวม'],
     ],
@@ -268,9 +268,9 @@ function renderPanelShell(kind, active, title, subtitle = '') {
       ${panel.links.map(([key, href, ic, label]) => link(key, href, ic, label)).join('')}
       <div class="sidebar__foot">
         <div class="row">
-          <span class="avatar">${escapeHtml(initials(user.name))}</span>
+          <span class="avatar" data-user-initials>${escapeHtml(initials(user.name))}</span>
           <div class="grow">
-            <div class="bold ellipsis" style="color:#fff">${escapeHtml(user.name || '')}</div>
+            <div class="bold ellipsis" style="color:#fff" data-user-name>${escapeHtml(user.name || '')}</div>
             <div class="tiny ellipsis">${escapeHtml(user.email || '')}</div>
           </div>
         </div>
@@ -293,6 +293,19 @@ function renderPanelShell(kind, active, title, subtitle = '') {
         <button class="nav-link logout-btn" onclick="handleLogout()" title="ออกจากระบบ">${icon('logout')}</button>
       </nav>`;
   }
+  if (getToken()) syncUserName();
+}
+
+// อัปเดตชื่อบัญชีใน sidebar ให้ตรงกับเซิร์ฟเวอร์
+async function syncUserName() {
+  try {
+    const me = await apiRequest('/me', { auth: true });
+    const user = getUser();
+    if (!user || user.name === me.name) return;
+    setAuth(getToken(), { ...user, name: me.name });
+    document.querySelectorAll('[data-user-name]').forEach((el) => (el.textContent = me.name));
+    document.querySelectorAll('[data-user-initials]').forEach((el) => (el.textContent = initials(me.name)));
+  } catch (e) { /* ใช้ชื่อที่จำไว้ */ }
 }
 
 // ออกจากระบบ

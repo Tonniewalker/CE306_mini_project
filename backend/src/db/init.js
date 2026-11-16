@@ -14,10 +14,10 @@ const STORE_PASSWORD = 'store1234';
 const STORE_NAME = 'PRE-FOOD Kitchen';
 const STORE_DESCRIPTION = 'อาหารตามสั่ง · ก๋วยเตี๋ยว · เครื่องดื่ม';
 
-// บัญชีผู้ดูแลระบบ
+// บัญชี Admin
 const ADMIN_EMAIL = 'admin@prefood.dpu.ac.th';
 const ADMIN_PASSWORD = 'admin1234';
-const ADMIN_NAME = 'ผู้ดูแลระบบ';
+const ADMIN_NAME = 'Admin';
 
 // อัปเดตฐานข้อมูลเก่าให้ตรงกับ schema ปัจจุบัน
 function migrate(db) {
@@ -206,6 +206,8 @@ function seed(db) {
     );
     console.log(`Seeded admin user: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   }
+  // ตั้งชื่อบัญชี admin ตัวอย่าง
+  db.prepare("UPDATE users SET name = ? WHERE lower(email) = ? AND role = 'admin'").run(ADMIN_NAME, ADMIN_EMAIL);
 
   // เมนูตัวอย่าง
   const menuCount = db.prepare('SELECT COUNT(*) AS c FROM menu_items').get().c;

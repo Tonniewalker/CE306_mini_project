@@ -1843,3 +1843,7 @@ a.avatar { color: var(--brand-700); }
 .bar-chart__col:hover .bar-chart__tip, .bar-chart__col:focus .bar-chart__tip { opacity: 1; }
 
 .modal:focus { outline: none; }
+
+/* หน้าภาพรวม admin */
+@media (min-width: 720px) { .stat-grid--3 { grid-template-columns: repeat(3, 1fr); } }
+.admin-table { min-width: 480px; }

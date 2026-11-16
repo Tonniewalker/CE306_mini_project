@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2a0b6b">
-<title>ภาพรวม · ผู้ดูแลระบบ PRE-FOOD</title>
+<title>ภาพรวม · Admin PRE-FOOD</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍱</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,12 +21,19 @@
           <div class="card__title" style="margin:0">Welcome, Admin!</div>
         </section>
 
+        <section class="stat-grid stat-grid--3 mt-16" id="stats"></section>
+
         <section class="card mt-16">
           <div class="between" style="margin-bottom:8px">
             <div class="card__title" style="margin:0" id="appsTitle">ใบสมัครร้านค้า</div>
             <span class="count-badge" id="appsCount">0</span>
           </div>
           <div id="appsList"><div class="skeleton" style="height:80px"></div></div>
+        </section>
+
+        <section class="card mt-16">
+          <div class="card__title">ร้านค้าวันนี้</div>
+          <div class="table-scroll" id="storesToday"><div class="skeleton" style="height:80px"></div></div>
         </section>
       </main>
     </div>
@@ -42,6 +49,42 @@
     document.getElementById('appsTitle').insertAdjacentHTML('afterbegin', icon('store'));
 
     let apps = [];
+
+    // แสดงตัวเลขภาพรวมและร้านค้าวันนี้
+    function renderStats(s) {
+      const stat = (emoji, bg, value, label) => `
+        <div class="stat"><div class="stat__icon" style="background:${bg}">${emoji}</div>
+          <div><div class="stat__value">${value}</div><div class="stat__label">${label}</div></div></div>`;
+      document.getElementById('stats').innerHTML =
+        stat('👥', 'var(--brand-50)', s.customers, 'ผู้ใช้ทั้งหมด') +
+        stat('🍽️', 'var(--green-50)', s.stores, 'ร้านค้าที่เปิดอยู่') +
+        stat('📝', 'var(--blue-50)', s.pending_applications, 'ใบสมัครรอตรวจ') +
+        stat('🧾', 'var(--brand-50)', s.orders_today, 'ออเดอร์วันนี้') +
+        stat('⏳', 'var(--amber-50)', s.active_orders, 'กำลังดำเนินการ') +
+        stat('💰', 'var(--amber-50)', formatCurrency(s.sales_today), 'ยอดขายวันนี้');
+
+      const state = (st) => st.status === 'suspended'
+        ? '<span class="pill pill--cancelled"><span class="dot"></span>ถูกระงับ</span>'
+        : st.is_accepting
+          ? '<span class="pill pill--ready"><span class="dot"></span>เปิดรับออเดอร์</span>'
+          : '<span class="pill pill--completed"><span class="dot"></span>ปิดรับชั่วคราว</span>';
+      document.getElementById('storesToday').innerHTML = s.stores_today.length
+        ? `<table class="history-table admin-table">
+            <thead><tr><th>ร้าน</th><th>สถานะ</th><th>ออเดอร์วันนี้</th><th>ยอดขายวันนี้</th></tr></thead>
+            <tbody>${s.stores_today.map((st) => `
+              <tr><td class="bold">${escapeHtml(st.name)}</td><td>${state(st)}</td><td>${st.orders}</td><td class="bold">${formatCurrency(st.sales)}</td></tr>`).join('')}
+            </tbody></table>`
+        : '<p class="small muted">ยังไม่มีร้านค้า</p>';
+    }
+
+    // โหลดตัวเลขภาพรวม
+    async function loadStats() {
+      try {
+        renderStats(await apiRequest('/admin/stats', { auth: true }));
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
 
     // แสดงใบสมัครที่รอตรวจ
     function renderApps() {
@@ -71,6 +114,7 @@
       try {
         apps = await apiRequest('/admin/applications?status=pending', { auth: true });
         renderApps();
+        loadStats();
       } catch (err) {
         toast(err.message, 'error');
       }

@@ -1,4 +1,4 @@
-// API ผู้ดูแลระบบ
+// API Admin
 const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcryptjs');
@@ -23,6 +23,37 @@ function storeQuery(where = '') {
                  u.id AS owner_id, u.name AS owner_name, u.email AS owner_email, u.phone AS owner_phone
           FROM stores s JOIN users u ON u.id = s.owner_id ${where}`;
 }
+
+// GET /api/admin/stats - ตัวเลขภาพรวมระบบ
+router.get('/stats', (req, res) => {
+  const count = (sql) => db.prepare(sql).get().n;
+  const today = "date(created_at, 'localtime') = date('now', 'localtime')";
+  // ออเดอร์และยอดขายวันนี้ของแต่ละร้าน
+  const storesToday = db
+    .prepare(
+      `SELECT s.id, s.name, s.status, s.is_accepting,
+              COUNT(o.id) AS orders,
+              COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total_amount END), 0) AS sales
+       FROM stores s
+       LEFT JOIN orders o ON o.store_id = s.id
+         AND date(o.created_at, 'localtime') = date('now', 'localtime')
+         AND o.status NOT IN ('cancelled', 'rejected')
+       WHERE s.status IN ('approved', 'suspended')
+       GROUP BY s.id
+       ORDER BY sales DESC, orders DESC, s.id`
+    )
+    .all();
+
+  res.json({
+    customers: count("SELECT COUNT(*) AS n FROM users WHERE role = 'customer'"),
+    stores: count("SELECT COUNT(*) AS n FROM stores WHERE status = 'approved'"),
+    pending_applications: count("SELECT COUNT(*) AS n FROM store_applications WHERE status = 'pending'"),
+    orders_today: count(`SELECT COUNT(*) AS n FROM orders WHERE ${today} AND status NOT IN ('cancelled', 'rejected')`),
+    sales_today: count(`SELECT COALESCE(SUM(total_amount), 0) AS n FROM orders WHERE ${today} AND status = 'completed'`),
+    active_orders: count("SELECT COUNT(*) AS n FROM orders WHERE status IN ('paid', 'preparing', 'ready')"),
+    stores_today: storesToday,
+  });
+});
 
 // GET /api/admin/stores - รายการร้าน (กรองด้วย ?status=)
 router.get('/stores', (req, res) => {

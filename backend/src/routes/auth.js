@@ -71,7 +71,7 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
   }
   if (!user.is_active) {
-    return res.status(403).json({ error: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ', code: 'suspended' });
+    return res.status(403).json({ error: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อ Admin', code: 'suspended' });
   }
 
   const token = signToken(user);
