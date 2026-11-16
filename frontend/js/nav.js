@@ -239,6 +239,7 @@ const PANELS = {
     links: [
       ['dashboard', 'admin-dashboard.html', 'grid', 'ภาพรวม', 'ภาพรวม'],
       ['stores', 'admin-stores.html', 'store', 'ร้านค้า', 'ร้านค้า'],
+      ['users', 'admin-users.html', 'user', 'ผู้ใช้', 'ผู้ใช้'],
     ],
   },
 };

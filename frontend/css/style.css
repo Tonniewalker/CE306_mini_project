@@ -1858,6 +1858,6 @@ a.avatar { color: var(--brand-700); }
 @media (max-width: 600px) {
   .admin-search { max-width: none; }
   .admin-store { grid-template-columns: 48px minmax(0, 1fr); gap: 12px; }
-  .admin-store__img { width: 48px; height: 48px; }
+  .admin-store__img, .admin-store .avatar--lg { width: 48px; height: 48px; }
   .admin-store__actions { grid-column: 1 / -1; }
 }

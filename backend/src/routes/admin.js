@@ -60,6 +60,33 @@ router.get('/stats', (req, res) => {
   });
 });
 
+// GET /api/admin/users - บัญชีผู้ใช้ทั้งหมด พร้อมสรุปการสั่ง
+router.get('/users', (req, res) => {
+  const users = db
+    .prepare(
+      `SELECT u.id, u.name, u.email, u.phone, u.is_active, u.created_at,
+              COUNT(o.id) AS orders,
+              COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total_amount END), 0) AS spent,
+              MAX(o.created_at) AS last_order_at
+       FROM users u LEFT JOIN orders o ON o.user_id = u.id
+       WHERE u.role = 'customer'
+       GROUP BY u.id
+       ORDER BY u.created_at DESC, u.id DESC`
+    )
+    .all();
+  res.json(users);
+});
+
+// PATCH /api/admin/users/:id/status - ระงับ/เปิดบัญชีผู้ใช้
+router.patch('/users/:id/status', (req, res) => {
+  const { is_active } = req.body;
+  if (typeof is_active !== 'boolean') return res.status(400).json({ error: 'ค่าสถานะบัญชีไม่ถูกต้อง' });
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'customer'").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'ไม่พบบัญชีผู้ใช้นี้' });
+  db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(is_active ? 1 : 0, user.id);
+  res.json({ id: user.id, is_active });
+});
+
 // GET /api/admin/stores - รายการร้าน (กรองด้วย ?status=)
 router.get('/stores', (req, res) => {
   const { status } = req.query;
