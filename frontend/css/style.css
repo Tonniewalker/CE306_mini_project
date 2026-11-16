@@ -1847,3 +1847,17 @@ a.avatar { color: var(--brand-700); }
 /* หน้าภาพรวม admin */
 @media (min-width: 720px) { .stat-grid--3 { grid-template-columns: repeat(3, 1fr); } }
 .admin-table { min-width: 480px; }
+
+/* รายการร้านของ admin */
+.admin-store { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.admin-store:first-child { border-top: 0; padding-top: 0; }
+.admin-store:last-child { padding-bottom: 0; }
+.admin-store__img { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 14px; overflow: hidden; background: var(--brand-50); font-size: 26px; }
+.admin-store__img img { width: 100%; height: 100%; object-fit: cover; }
+.admin-search { flex: 1 1 220px; max-width: 320px; }
+@media (max-width: 600px) {
+  .admin-search { max-width: none; }
+  .admin-store { grid-template-columns: 48px minmax(0, 1fr); gap: 12px; }
+  .admin-store__img { width: 48px; height: 48px; }
+  .admin-store__actions { grid-column: 1 / -1; }
+}

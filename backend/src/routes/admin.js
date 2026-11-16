@@ -9,6 +9,7 @@ const router = express.Router();
 router.use(authenticate, requireRole('admin'));
 
 const STORE_STATUSES = ['pending', 'approved', 'rejected', 'suspended'];
+const SUSPEND_REASON = 'ร้านถูกระงับการใช้งาน';
 // สถานะร้านที่เปลี่ยนไปได้
 const STORE_TRANSITIONS = {
   pending: ['approved', 'rejected'],
@@ -17,10 +18,14 @@ const STORE_TRANSITIONS = {
   rejected: ['approved'],
 };
 
-// ดึงร้านพร้อมข้อมูลเจ้าของ
+// ดึงร้านพร้อมข้อมูลเจ้าของ จำนวนเมนู และออเดอร์ที่ยังค้าง
 function storeQuery(where = '') {
-  return `SELECT s.id, s.name, s.description, s.status, s.created_at, s.image_url,
-                 u.id AS owner_id, u.name AS owner_name, u.email AS owner_email, u.phone AS owner_phone
+  return `SELECT s.id, s.name, s.description, s.status, s.created_at, s.image_url, s.is_accepting,
+                 s.open_time, s.close_time,
+                 u.id AS owner_id, u.name AS owner_name, u.email AS owner_email, u.phone AS owner_phone,
+                 (SELECT COUNT(*) FROM menu_items m WHERE m.store_id = s.id) AS menu_count,
+                 (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id
+                    AND o.status IN ('paid', 'preparing', 'ready')) AS active_orders
           FROM stores s JOIN users u ON u.id = s.owner_id ${where}`;
 }
 
@@ -75,8 +80,25 @@ router.patch('/stores/:id/status', (req, res) => {
   if (!(STORE_TRANSITIONS[store.status] || []).includes(status)) {
     return res.status(409).json({ error: 'เปลี่ยนสถานะร้านแบบนี้ไม่ได้ กรุณารีเฟรช' });
   }
-  db.prepare('UPDATE stores SET status = ? WHERE id = ? AND status = ?').run(status, store.id, store.status);
-  res.json(db.prepare(storeQuery('WHERE s.id = ?')).get(store.id));
+  const closed = db.transaction(() => {
+    db.prepare('UPDATE stores SET status = ? WHERE id = ? AND status = ?').run(status, store.id, store.status);
+    if (status !== 'suspended') return 0;
+    // ระงับร้านแล้ว ปิดออเดอร์ที่ค้างและคืนเงินให้ลูกค้า
+    const active = db
+      .prepare("SELECT id FROM orders WHERE store_id = ? AND status IN ('paid', 'preparing', 'ready')")
+      .all(store.id);
+    const reject = db.prepare(
+      `UPDATE orders SET status = 'rejected', payment_status = 'refunded', cancel_reason = ?,
+         updated_at = datetime('now') WHERE id = ?`
+    );
+    const log = db.prepare('INSERT INTO order_status_logs (order_id, status, changed_by, note) VALUES (?, ?, ?, ?)');
+    for (const { id } of active) {
+      reject.run(SUSPEND_REASON, id);
+      log.run(id, 'rejected', req.user.id, SUSPEND_REASON);
+    }
+    return active.length;
+  })();
+  res.json({ ...db.prepare(storeQuery('WHERE s.id = ?')).get(store.id), closed_orders: closed });
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

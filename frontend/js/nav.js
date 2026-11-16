@@ -238,6 +238,7 @@ const PANELS = {
     label: 'Admin',
     links: [
       ['dashboard', 'admin-dashboard.html', 'grid', 'ภาพรวม', 'ภาพรวม'],
+      ['stores', 'admin-stores.html', 'store', 'ร้านค้า', 'ร้านค้า'],
     ],
   },
 };
